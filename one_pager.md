@@ -35,7 +35,7 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 
 **Power.** At n=499 aligned per arm on MMLU (1 dropped as a true MMLU duplicate-question), detects ≥3.8pp accuracy differences at 80% power, α=0.05 (paired diff SD = 0.30 observed). At n=300 per arm on NER, detects span-F1 differences ≥4.3pp (paired diff SD = 0.27 observed). Both are post-hoc verified on the actual data.
 
-**Hardware.** DGX Spark, Ollama 0.22.1, llama.cpp backend.
+**Hardware.** MacBook Pro (Apple M4 Max, 14-core CPU / 32-core GPU, 36 GB unified memory), Ollama 0.22.1, llama.cpp Metal backend.
 
 ---
 
@@ -43,13 +43,13 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 
 ### Headline numbers
 
-| Arm     | MMLU accuracy [95% CI]    | NER F1 (CoNLL) [95% CI]   | tok/sec (MMLU / NER) | VRAM¹    |
+| Arm     | MMLU accuracy [95% CI]    | NER F1 (CoNLL) [95% CI]   | tok/sec (MMLU / NER) | Memory¹  |
 |---------|----------------------------|----------------------------|----------------------|----------|
 | FP16    | 0.585 [0.541, 0.628]       | 0.614 [0.570, 0.662]       | 40.9 / 20.7          | ~16.0 GB |
 | Q8_0    | 0.587 [0.544, 0.630]       | 0.614 [0.568, 0.661]       | 72.7 / 38.8          | ~8.5 GB  |
 | Q4_K_M  | 0.569 [0.525, 0.612]       | 0.564 [0.518, 0.611]       | 102.9 / 51.3         | ~4.9 GB  |
 
-¹ Model footprint as reported by Ollama (`ollama show`). Runtime VRAM at inference adds KV cache and activation overhead.
+¹ Model footprint as reported by Ollama (`ollama show`). On Apple Silicon this is unified memory, not discrete VRAM; runtime usage adds KV cache and activation overhead. On a 36 GB M4 Max, FP16 is the largest model that comfortably runs alongside other workloads — the memory column matters as much as the throughput column.
 
 ### Pairwise effect sizes (paired CIs; Holm-adjusted within task)
 
@@ -85,7 +85,7 @@ Based on these results, here's the call I'd make as a PM choosing a quantization
 **Pick Q4_K_M only when:**
 - Throughput is the binding constraint and a measurable F1 hit on structured extraction is acceptable downstream (human review, retry logic, low-stakes outputs).
 - The workload is **not** structured information extraction. The 5pp NER gap is significant; Q4 emits well-formed JSON with the wrong entities, which is harder to detect downstream than malformed output.
-- Memory pressure is real: Q4_K_M's ~5 GB footprint vs. FP16's ~16 GB matters for multi-tenant serving.
+- Memory is the binding constraint: Q4_K_M's ~5 GB footprint vs. FP16's ~16 GB matters on memory-limited machines (laptops, edge, or multi-tenant serving).
 
 **Stay at FP16 when:**
 - Accuracy is the binding constraint (regulated outputs, safety-critical, eval ground truth).
