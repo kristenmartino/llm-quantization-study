@@ -1,0 +1,760 @@
+[
+  {
+    "task": "mmlu",
+    "schema_version": 2,
+    "intervals": {
+      "fp16": {
+        "mean": 0.5851703406813628,
+        "lower": 0.5414505284419446,
+        "upper": 0.6275887873187245,
+        "n": 499
+      },
+      "q8_0": {
+        "mean": 0.5871743486973948,
+        "lower": 0.5434696354681325,
+        "upper": 0.6295470759574935,
+        "n": 499
+      },
+      "q4_K_M": {
+        "mean": 0.5691382765531062,
+        "lower": 0.5253237556131402,
+        "upper": 0.6118963948278734,
+        "n": 499
+      }
+    },
+    "pairwise_diffs": [
+      {
+        "arm_a": "fp16",
+        "arm_b": "q8_0",
+        "diff": -0.002004008016032064,
+        "lower": -0.008048289738430584,
+        "upper": 0.004008016032064128,
+        "p_value": 1.0,
+        "p_adj": 1.0,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 499
+      },
+      {
+        "arm_a": "fp16",
+        "arm_b": "q4_K_M",
+        "diff": 0.01603206412825651,
+        "lower": -0.006,
+        "upper": 0.03614457831325301,
+        "p_value": 0.3020282281097766,
+        "p_adj": 0.6991139468217161,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 499
+      },
+      {
+        "arm_a": "q8_0",
+        "arm_b": "q4_K_M",
+        "diff": 0.018036072144288578,
+        "lower": -0.002,
+        "upper": 0.038,
+        "p_value": 0.23303798227390538,
+        "p_adj": 0.6991139468217161,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 499
+      }
+    ],
+    "speeds_tok_per_sec": {
+      "fp16": 40.86046984414092,
+      "q8_0": 72.6631154999294,
+      "q4_K_M": 102.93197603241417
+    },
+    "n_per_arm": {
+      "fp16": 499,
+      "q8_0": 499,
+      "q4_K_M": 499
+    },
+    "n_aligned": 499,
+    "per_subject": {
+      "abstract_algebra": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.36,
+            "lower": 0.24138562967182875,
+            "upper": 0.49859237989698046,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.34,
+            "lower": 0.2243676963506106,
+            "upper": 0.47846431458517147,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.32,
+            "lower": 0.20758044093999403,
+            "upper": 0.45810557136276076,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.02,
+            "lower": 0.0,
+            "upper": 0.06,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.04,
+            "lower": -0.04,
+            "upper": 0.12,
+            "p_value": 0.625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.02,
+            "lower": -0.04,
+            "upper": 0.1,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "college_computer_science": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.64,
+            "lower": 0.5014076201030195,
+            "upper": 0.7586143703281711,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.66,
+            "lower": 0.5215356854148285,
+            "upper": 0.7756323036493895,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.66,
+            "lower": 0.5215356854148285,
+            "upper": 0.7756323036493895,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": -0.02,
+            "lower": -0.06,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": -0.02,
+            "lower": -0.08049999999999784,
+            "upper": 0.04,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.0,
+            "lower": -0.06,
+            "upper": 0.06,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "econometrics": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.46,
+            "lower": 0.3296943460178263,
+            "upper": 0.5960136567161192,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.46,
+            "lower": 0.3296943460178263,
+            "upper": 0.5960136567161192,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.46,
+            "lower": 0.3296943460178263,
+            "upper": 0.5960136567161192,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.0,
+            "lower": -0.06,
+            "upper": 0.06,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.0,
+            "lower": -0.06,
+            "upper": 0.06,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "high_school_mathematics": {
+        "n": 49,
+        "intervals": {
+          "fp16": {
+            "mean": 0.46938775510204084,
+            "lower": 0.33703281897894777,
+            "upper": 0.6061937298008014,
+            "n": 49
+          },
+          "q8_0": {
+            "mean": 0.4897959183673469,
+            "lower": 0.3557488315940086,
+            "upper": 0.6253266846659078,
+            "n": 49
+          },
+          "q4_K_M": {
+            "mean": 0.46938775510204084,
+            "lower": 0.33703281897894777,
+            "upper": 0.6061937298008014,
+            "n": 49
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": -0.02040816326530612,
+            "lower": -0.061224489795918366,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 49
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.0,
+            "lower": -0.10204081632653061,
+            "upper": 0.10204081632653061,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 49
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.02040816326530612,
+            "lower": -0.08163265306122448,
+            "upper": 0.12244897959183673,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 49
+          }
+        ]
+      },
+      "high_school_us_history": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.8,
+            "lower": 0.6696262789551477,
+            "upper": 0.8875637005402612,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.8,
+            "lower": 0.6696262789551477,
+            "upper": 0.8875637005402612,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.82,
+            "lower": 0.6920368054529739,
+            "upper": 0.902299172675462,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": -0.02,
+            "lower": -0.06,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": -0.02,
+            "lower": -0.06,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "machine_learning": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.42,
+            "lower": 0.2937479723456693,
+            "upper": 0.5576680331222217,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.42,
+            "lower": 0.2937479723456693,
+            "upper": 0.5576680331222217,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.38,
+            "lower": 0.2586259584257722,
+            "upper": 0.5184980497760643,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.04,
+            "lower": -0.04,
+            "upper": 0.12,
+            "p_value": 0.625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.04,
+            "lower": -0.04,
+            "upper": 0.12,
+            "p_value": 0.625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "miscellaneous": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.78,
+            "lower": 0.6475818431054045,
+            "upper": 0.8724621377569771,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.78,
+            "lower": 0.6475818431054045,
+            "upper": 0.8724621377569771,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.72,
+            "lower": 0.5833461285401034,
+            "upper": 0.8252598564231963,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.06,
+            "lower": 0.0,
+            "upper": 0.14,
+            "p_value": 0.25,
+            "p_adj": 0.75,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.06,
+            "lower": 0.0,
+            "upper": 0.14,
+            "p_value": 0.25,
+            "p_adj": 0.75,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "moral_scenarios": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.56,
+            "lower": 0.4230578680014353,
+            "upper": 0.6883801278976466,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.56,
+            "lower": 0.4230578680014353,
+            "upper": 0.6883801278976466,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.52,
+            "lower": 0.3851151225880844,
+            "upper": 0.6520308760449429,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.04,
+            "lower": -0.08,
+            "upper": 0.16,
+            "p_value": 0.75390625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.04,
+            "lower": -0.08,
+            "upper": 0.16,
+            "p_value": 0.75390625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "professional_law": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.5,
+            "lower": 0.36644286412332855,
+            "upper": 0.6335571358766714,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.5,
+            "lower": 0.36644286412332855,
+            "upper": 0.6335571358766714,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.54,
+            "lower": 0.40398634328388083,
+            "upper": 0.6703056539821737,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": -0.04,
+            "lower": -0.16,
+            "upper": 0.08,
+            "p_value": 0.75390625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": -0.04,
+            "lower": -0.16,
+            "upper": 0.08,
+            "p_value": 0.75390625,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      },
+      "professional_medicine": {
+        "n": 50,
+        "intervals": {
+          "fp16": {
+            "mean": 0.86,
+            "lower": 0.738135428014719,
+            "upper": 0.9304925473797714,
+            "n": 50
+          },
+          "q8_0": {
+            "mean": 0.86,
+            "lower": 0.738135428014719,
+            "upper": 0.9304925473797714,
+            "n": 50
+          },
+          "q4_K_M": {
+            "mean": 0.8,
+            "lower": 0.6696262789551477,
+            "upper": 0.8875637005402612,
+            "n": 50
+          }
+        },
+        "pairwise_diffs": [
+          {
+            "arm_a": "fp16",
+            "arm_b": "q8_0",
+            "diff": 0.0,
+            "lower": 0.0,
+            "upper": 0.0,
+            "p_value": 1.0,
+            "p_adj": 1.0,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "fp16",
+            "arm_b": "q4_K_M",
+            "diff": 0.06,
+            "lower": 0.0,
+            "upper": 0.14,
+            "p_value": 0.25,
+            "p_adj": 0.75,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          },
+          {
+            "arm_a": "q8_0",
+            "arm_b": "q4_K_M",
+            "diff": 0.06,
+            "lower": 0.0,
+            "upper": 0.14,
+            "p_value": 0.25,
+            "p_adj": 0.75,
+            "lower_adj": null,
+            "upper_adj": null,
+            "n_pairs": 50
+          }
+        ]
+      }
+    }
+  },
+  {
+    "task": "extraction",
+    "schema_version": 2,
+    "intervals": {
+      "fp16": {
+        "mean": 0.6140923520923521,
+        "lower": 0.5696394901394901,
+        "upper": 0.6615988997113997,
+        "n": 300
+      },
+      "q8_0": {
+        "mean": 0.6137510822510822,
+        "lower": 0.5679943422318422,
+        "upper": 0.661213011063011,
+        "n": 300
+      },
+      "q4_K_M": {
+        "mean": 0.5637308802308802,
+        "lower": 0.5177703703703702,
+        "upper": 0.6109045634920635,
+        "n": 300
+      }
+    },
+    "pairwise_diffs": [
+      {
+        "arm_a": "fp16",
+        "arm_b": "q8_0",
+        "diff": 0.0003412698412698417,
+        "lower": -0.006177711640211638,
+        "upper": 0.006666666666666667,
+        "p_value": 0.917,
+        "p_adj": 0.917,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "fp16",
+        "arm_b": "q4_K_M",
+        "diff": 0.05036147186147187,
+        "lower": 0.021220310245310268,
+        "upper": 0.08085803270803267,
+        "p_value": 0.001,
+        "p_adj": 0.003,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "q8_0",
+        "arm_b": "q4_K_M",
+        "diff": 0.05002020202020203,
+        "lower": 0.01967848725348726,
+        "upper": 0.08125331289081285,
+        "p_value": 0.0012,
+        "p_adj": 0.003,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      }
+    ],
+    "speeds_tok_per_sec": {
+      "fp16": 20.694125730086903,
+      "q8_0": 38.840367232679014,
+      "q4_K_M": 51.34635006369794
+    },
+    "n_per_arm": {
+      "fp16": 300,
+      "q8_0": 300,
+      "q4_K_M": 300
+    },
+    "n_aligned": 300
+  }
+]

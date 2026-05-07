@@ -1,0 +1,25 @@
+/Users/rootk/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Loaded 300 examples for task=extraction
+Arms: ['fp16', 'q8_0', 'q4_K_M']  schedule: roundrobin  resume: False
+Writing to: /Users/rootk/quantization study/results
+[fp16] warming up llama3.1:8b-instruct-fp16...
+[q8_0] warming up llama3.1:8b-instruct-q8_0...
+[q4_K_M] warming up llama3.1:8b-instruct-q4_K_M...
+[rr] 25/300  fp16=0.516  q8_0=0.516  q4_K_M=0.425  elapsed=766s
+[rr] 50/300  fp16=0.548  q8_0=0.548  q4_K_M=0.462  elapsed=1520s
+[rr] 75/300  fp16=0.524  q8_0=0.526  q4_K_M=0.465  elapsed=2216s
+[rr] 100/300  fp16=0.576  q8_0=0.577  q4_K_M=0.531  elapsed=2939s
+[rr] 125/300  fp16=0.591  q8_0=0.592  q4_K_M=0.552  elapsed=3719s
+[rr] 150/300  fp16=0.587  q8_0=0.585  q4_K_M=0.554  elapsed=4673s
+[rr] 175/300  fp16=0.578  q8_0=0.576  q4_K_M=0.543  elapsed=5464s
+[rr] 200/300  fp16=0.603  q8_0=0.605  q4_K_M=0.555  elapsed=6204s
+[rr] 225/300  fp16=0.598  q8_0=0.600  q4_K_M=0.550  elapsed=7113s
+[rr] 250/300  fp16=0.594  q8_0=0.594  q4_K_M=0.549  elapsed=7883s
+[rr] 275/300  fp16=0.600  q8_0=0.600  q4_K_M=0.553  elapsed=8634s
+[rr] 300/300  fp16=0.614  q8_0=0.614  q4_K_M=0.564  elapsed=9310s
+
+ALL DONE  elapsed=9310s
+  fp16: mean=0.6141  n=300
+  q8_0: mean=0.6138  n=300
+  q4_K_M: mean=0.5637  n=300

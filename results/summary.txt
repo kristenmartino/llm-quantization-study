@@ -1,0 +1,38 @@
+
+=== MMLU ===
+n per arm: {'fp16': 499, 'q8_0': 499, 'q4_K_M': 499}  (aligned: 499)
+
+Per-arm performance (95% CI):
+  fp16      0.5852  [0.5415, 0.6276]  speed=40.9 tok/s
+  q8_0      0.5872  [0.5435, 0.6295]  speed=72.7 tok/s
+  q4_K_M    0.5691  [0.5253, 0.6119]  speed=102.9 tok/s
+
+Paired pairwise differences (95% CI; * = Holm-adjusted p<0.05):
+  fp16 - q8_0: -0.0020  [-0.0080, +0.0040]  p=1 p_adj=1
+  fp16 - q4_K_M: +0.0160  [-0.0060, +0.0361]  p=0.302 p_adj=0.6991
+  q8_0 - q4_K_M: +0.0180  [-0.0020, +0.0380]  p=0.233 p_adj=0.6991
+
+Per-subject MMLU effects (sorted by Q4-FP16 Δ):
+  miscellaneous                     fp16=0.780  q4=0.720  Δ=-0.060  (n=50)
+  professional_medicine             fp16=0.860  q4=0.800  Δ=-0.060  (n=50)
+  abstract_algebra                  fp16=0.360  q4=0.320  Δ=-0.040  (n=50)
+  machine_learning                  fp16=0.420  q4=0.380  Δ=-0.040  (n=50)
+  moral_scenarios                   fp16=0.560  q4=0.520  Δ=-0.040  (n=50)
+  econometrics                      fp16=0.460  q4=0.460  Δ=-0.000  (n=50)
+  high_school_mathematics           fp16=0.469  q4=0.469  Δ=-0.000  (n=49)
+  college_computer_science          fp16=0.640  q4=0.660  Δ=+0.020  (n=50)
+  high_school_us_history            fp16=0.800  q4=0.820  Δ=+0.020  (n=50)
+  professional_law                  fp16=0.500  q4=0.540  Δ=+0.040  (n=50)
+
+=== EXTRACTION ===
+n per arm: {'fp16': 300, 'q8_0': 300, 'q4_K_M': 300}  (aligned: 300)
+
+Per-arm performance (95% CI):
+  fp16      0.6141  [0.5696, 0.6616]  speed=20.7 tok/s
+  q8_0      0.6138  [0.5680, 0.6612]  speed=38.8 tok/s
+  q4_K_M    0.5637  [0.5178, 0.6109]  speed=51.3 tok/s
+
+Paired pairwise differences (95% CI; * = Holm-adjusted p<0.05):
+  fp16 - q8_0: +0.0003  [-0.0062, +0.0067]  p=0.917 p_adj=0.917
+  fp16 - q4_K_M: +0.0504  [+0.0212, +0.0809]  p=0.001 p_adj=0.003 *
+  q8_0 - q4_K_M: +0.0500  [+0.0197, +0.0813]  p=0.0012 p_adj=0.003 *

@@ -1,0 +1,33 @@
+/Users/rootk/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+Loaded 500 examples for task=mmlu
+Arms: ['fp16', 'q8_0', 'q4_K_M']  schedule: roundrobin  resume: False
+Writing to: /Users/rootk/quantization study/results
+[fp16] warming up llama3.1:8b-instruct-fp16...
+[q8_0] warming up llama3.1:8b-instruct-q8_0...
+[q4_K_M] warming up llama3.1:8b-instruct-q4_K_M...
+[rr] 25/500  fp16=0.520  q8_0=0.480  q4_K_M=0.360  elapsed=569s
+[rr] 50/500  fp16=0.660  q8_0=0.640  q4_K_M=0.560  elapsed=1089s
+[rr] 75/500  fp16=0.640  q8_0=0.627  q4_K_M=0.560  elapsed=1614s
+[rr] 100/500  fp16=0.610  q8_0=0.600  q4_K_M=0.540  elapsed=2188s
+[rr] 125/500  fp16=0.608  q8_0=0.600  q4_K_M=0.552  elapsed=2814s
+[rr] 150/500  fp16=0.620  q8_0=0.613  q4_K_M=0.560  elapsed=3430s
+[rr] 175/500  fp16=0.629  q8_0=0.623  q4_K_M=0.577  elapsed=4029s
+[rr] 200/500  fp16=0.635  q8_0=0.630  q4_K_M=0.590  elapsed=4638s
+[rr] 225/500  fp16=0.640  q8_0=0.636  q4_K_M=0.600  elapsed=5265s
+[rr] 250/500  fp16=0.640  q8_0=0.636  q4_K_M=0.596  elapsed=5888s
+[rr] 275/500  fp16=0.629  q8_0=0.633  q4_K_M=0.596  elapsed=6466s
+[rr] 300/500  fp16=0.620  q8_0=0.623  q4_K_M=0.583  elapsed=7146s
+[rr] 325/500  fp16=0.615  q8_0=0.618  q4_K_M=0.582  elapsed=7765s
+[rr] 350/500  fp16=0.603  q8_0=0.606  q4_K_M=0.574  elapsed=8343s
+[rr] 375/500  fp16=0.597  q8_0=0.600  q4_K_M=0.579  elapsed=8994s
+[rr] 400/500  fp16=0.593  q8_0=0.595  q4_K_M=0.570  elapsed=9568s
+[rr] 425/500  fp16=0.593  q8_0=0.595  q4_K_M=0.569  elapsed=10107s
+[rr] 450/500  fp16=0.589  q8_0=0.591  q4_K_M=0.571  elapsed=10665s
+[rr] 475/500  fp16=0.589  q8_0=0.592  q4_K_M=0.575  elapsed=11191s
+[rr] 500/500  fp16=0.584  q8_0=0.586  q4_K_M=0.568  elapsed=11752s
+
+ALL DONE  elapsed=11752s
+  fp16: mean=0.5840  n=500
+  q8_0: mean=0.5860  n=500
+  q4_K_M: mean=0.5680  n=500
