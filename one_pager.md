@@ -63,7 +63,7 @@ A CI that doesn't cross zero is a statistically detectable effect at the 95% lev
 
 ### Quality vs. cost frontier
 
-![Pareto frontier: quality vs. inference speed across arms](pareto.png)
+![Pareto frontier: quality vs. inference speed across arms](results/pareto.png)
 
 Q8_0 sits cleanly on the Pareto frontier — same accuracy as FP16, ~1.8× the throughput. Q4_K_M earns an additional ~40% throughput (2.5× FP16) but pays for it on NER: a measurable 5pp F1 drop driven by Q4 emitting well-formed JSON with the wrong entities (parse rate 99.7%, vs. 99.0% for FP16 — quantization brittleness here is semantic, not syntactic).
 
