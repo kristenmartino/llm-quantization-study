@@ -33,7 +33,7 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 - NER: Bootstrap percentile 95% CI per arm on span-F1; paired pairwise differences via paired bootstrap; p-values via paired bootstrap (two-sided, centered under H0).
 - Multiple-comparison correction: Holm-Bonferroni applied per task across the 3 pairwise tests.
 
-**Power.** At n=499 aligned per arm on MMLU (1 dropped as a true MMLU duplicate-question), detects ≥3.8pp accuracy differences at 80% power, α=0.05 (paired diff SD = 0.30 observed). At n=300 per arm on NER, detects span-F1 differences ≥4.3pp (paired diff SD = 0.27 observed). Both are post-hoc verified on the actual data.
+**Power.** At n=499 aligned per arm on MMLU, detects ≥3.8pp accuracy differences at 80% power, α=0.05 (paired diff SD = 0.30 observed). At n=300 per arm on NER, detects span-F1 differences ≥4.3pp (paired diff SD = 0.27 observed). Both post-hoc verified on the actual data. (1 MMLU example was dropped from alignment because the SHA1-hashed `example_id` correctly identified a true duplicate in `cais/mmlu`'s `high_school_mathematics` test split — the same word problem appears at rows 5 and 48 with shuffled answer choices but the same correct answer. Known MMLU data-hygiene artifact, not a harness bug.)
 
 **Hardware.** MacBook Pro (Apple M4 Max, 14-core CPU / 32-core GPU, 36 GB unified memory), Ollama 0.22.1, llama.cpp Metal backend.
 
@@ -65,7 +65,7 @@ A CI that doesn't cross zero is a statistically detectable effect at the 95% lev
 
 ![Pareto frontier: quality vs. inference speed across arms](results/pareto.png)
 
-Q8_0 sits cleanly on the Pareto frontier — same accuracy as FP16, ~1.8× the throughput. Q4_K_M earns an additional ~40% throughput (2.5× FP16) but pays for it on NER: a measurable 5pp F1 drop driven by Q4 emitting well-formed JSON with the wrong entities (parse rate 99.7%, vs. 99.0% for FP16 — quantization brittleness here is semantic, not syntactic).
+Q8_0 sits cleanly on the Pareto frontier — same accuracy as FP16, ~1.8× the throughput. Q4_K_M earns an additional ~40% throughput (2.5× FP16) but pays for it on NER. The failure mode is semantic, not syntactic: Q4 actually has the highest JSON parse rate of the three arms (99.7%, vs. 99.0% FP16 and 98.7% Q8_0), but it produces 95 well-formed-but-zero-F1 outputs vs. 76 for FP16 — Q4 emits valid JSON arrays that name the wrong entities. The brittleness shows up in entity selection, not in structural compliance.
 
 ### Where the effect concentrates
 
