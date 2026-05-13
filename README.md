@@ -137,11 +137,3 @@ python analyze.py
 ```
 
 Total LLM runtime: ~5.8 hours of generation across 3 arms × (500 MMLU + 300 NER) examples, mostly unattended. MMLU runs at ~3h22m wall, NER at ~2h35m.
-
----
-
-## What this study illustrates
-
-For roles where the methodological bar matters: this is a controlled experiment — single intervention (precision), constant covariates, properly powered, effect sizes reported with CIs, limitations acknowledged. The "treatment" is quantization, the "outcome" is task performance, and the inference cost measurements turn it from a benchmark into a PM-actionable cost/quality frontier.
-
-For PM roles: this is how I evaluate a model decision. Token budgets are unit economics. Quality is measured, not assumed. Trade-offs are quantified, not asserted.
