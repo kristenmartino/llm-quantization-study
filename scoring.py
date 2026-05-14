@@ -69,18 +69,23 @@ class DifferenceEstimate:
 # Wilson score interval (for binary outcomes like MMLU correct/incorrect)
 # ---------------------------------------------------------------------------
 
-def wilson_interval(scores: list[float], confidence: float = 0.95) -> IntervalEstimate:
+_Z_95 = 1.96  # Two-sided z for 95% confidence — the only level the study uses
+
+
+def wilson_interval(scores: list[float]) -> IntervalEstimate:
     """Wilson score 95% CI for a binary proportion.
 
-    More accurate than normal approximation, especially for proportions near 0 or 1.
-    Inputs should be 0/1 floats (or coerced equivalents).
+    More accurate than the normal approximation, especially for proportions near
+    0 or 1. Inputs should be 0/1 floats (or coerced equivalents). Confidence is
+    fixed at 95% — the entire study uses one CI level, so the parameter was
+    pure surface area.
     """
     n = len(scores)
     if n == 0:
         return IntervalEstimate(mean=0.0, lower=0.0, upper=0.0, n=0)
 
     p = sum(scores) / n
-    z = _z_score(confidence)
+    z = _Z_95
     denom = 1 + z**2 / n
     center = (p + z**2 / (2 * n)) / denom
     half_width = (z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2))) / denom
@@ -285,21 +290,3 @@ def holm_adjust(p_values: list[float]) -> list[float]:
     return adjusted
 
 
-# ---------------------------------------------------------------------------
-# Internals
-# ---------------------------------------------------------------------------
-
-def _z_score(confidence: float) -> float:
-    """Two-sided z-score for the given confidence level. 0.95 -> 1.96."""
-    # Inverse of the standard normal CDF at (1+conf)/2
-    # For common values we hardcode; for others fall back to scipy if available
-    common = {0.90: 1.6449, 0.95: 1.96, 0.99: 2.5758}
-    if confidence in common:
-        return common[confidence]
-    try:
-        from scipy.stats import norm
-        return float(norm.ppf((1 + confidence) / 2))
-    except ImportError:
-        raise ValueError(
-            f"Confidence {confidence} not in {list(common)}; install scipy for arbitrary levels."
-        )
