@@ -93,8 +93,6 @@ Based on these results, here's the call I'd make as a PM choosing a quantization
 
 A non-obvious finding: the published intuition that "Q4 is fine for pattern-matching, hurts on reasoning" doesn't hold here. NER is a structured pattern-extraction task, and it's where Q4 visibly degrades. MMLU (more reasoning-heavy) shows a numerically smaller Q4 regression that doesn't reach significance. The mechanism worth pointing at: Q4 is sensitive to *output structure fidelity*, not problem difficulty.
 
-This is the kind of decision I make routinely when picking models for portfolio projects (Sift uses Haiku for high-volume summarization, Tarazu uses Opus for reasoning-heavy decision scoring) — the same logic applies to picking a quantization level within a model family.
-
 ---
 
 ## Limitations
