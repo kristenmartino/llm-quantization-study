@@ -8,7 +8,9 @@ Kristen Martino · [kristenmartino.ai](https://kristenmartino.ai) · [Repo](http
 
 ## TL;DR
 
-Holding everything else constant, **Q8_0 is statistically indistinguishable from FP16** on both MMLU accuracy (Δ=−0.2pp, 95% CI: −0.8 to +0.4) and CoNLL-2003 NER F1 (Δ=+0.0003, 95% CI: −0.006 to +0.007), at **~1.8× the throughput**. **Q4_K_M loses 5.0pp F1 on NER** (95% CI: 2.1–8.1pp; Holm-adjusted p=0.003) and **1.6pp on MMLU** (not significant; 95% CI: −0.6 to +3.6pp), at ~2.5× FP16 throughput. For most production workloads, **Q8_0 is the Pareto-optimal default**; Q4_K_M is the right call only when throughput dominates and a measurable F1 hit on structured tasks is acceptable.
+**Ship Q8_0 as the default for Llama 3.1 8B Instruct.** It's statistically indistinguishable from FP16 on both tasks — MMLU accuracy (Δ=−0.2pp, 95% CI: −0.8 to +0.4) and CoNLL-2003 NER F1 (Δ=+0.0003, 95% CI: −0.006 to +0.007) — at ~1.8× the throughput and roughly half the memory footprint. The strongest evidence in this study is for Q8_0 ≈ FP16, not for any quantization-vs-quantization degradation.
+
+**Reach for Q4_K_M only when memory or latency is binding *and* the workload doesn't include structured information extraction.** Q4_K_M loses 5.0pp F1 on NER (95% CI: 2.1–8.1pp; Holm-adjusted p=0.003) for an additional ~40% throughput (2.5× FP16 total) and an ~3× smaller memory footprint. The MMLU regression (1.6pp) does not reach significance. The non-obvious failure mode: Q4 emits well-formed JSON at a slightly *higher* parse rate than FP16, but selects the wrong entities — the brittleness is semantic, not syntactic.
 
 ## Why this matters for PMs
 
@@ -71,6 +73,8 @@ Q8_0 sits cleanly on the Pareto frontier — same accuracy as FP16, ~1.8× the t
 
 The Q4 vs. FP16 gap on MMLU is concentrated in `miscellaneous` (−6.0pp) and `professional_medicine` (−6.0pp), with smaller regressions in `moral_scenarios`, `abstract_algebra`, and `machine_learning` (each −4.0pp). Several subjects move the other way — `professional_law` (+4.0pp), `college_computer_science` (+2.0pp), `high_school_us_history` (+2.0pp) — within the noise band for n=50/subject. None of the per-subject pairwise diffs survives Holm correction within the per-subject family of 3 tests, so this is suggestive heterogeneity worth flagging, not replicable evidence of subject-specific quantization sensitivity. The pattern is consistent with the published intuition that quantization hits broad-knowledge recall harder than narrow reasoning, but a properly powered subject-level study would need ~3× the per-subject sample size.
 
+*Calibration against the literature.* Published Llama-family Q4 quantization evaluations (GPTQ, AWQ, QLoRA papers; the Ollama / llama.cpp release notes) typically report low-single-digit percentage-point degradation on standard benchmarks. The 5pp NER drop sits at the higher end of that band, consistent with structured-output tasks stressing quantization harder than free-form generation or multiple-choice classification. The MMLU result (1.6pp NS) is firmly within the published range.
+
 ---
 
 ## A decision framework
@@ -113,13 +117,25 @@ Honest caveats — flagging these is itself part of the methodological signal.
 Code, prompts, per-example raw outputs, and the analysis script are in this repo. The harness is ~1,000 LOC of Python: a deterministic Ollama wrapper, two task loaders (MMLU from HuggingFace `cais/mmlu`, NER from `eriktks/conll2003`), paired bootstrap + Wilson CIs + McNemar + Holm in pure scipy, a round-robin runner, and an analyze step that emits the Pareto plot. The `results/` directory ships with the n=2,400 raw outputs backing every number above.
 
 ```
-ollama_client.py    # Thin wrapper around Ollama with deterministic sampling
-tasks.py            # Task loaders (MMLU subset, CoNLL-2003 NER)
-scoring.py          # Wilson + bootstrap CIs, paired bootstrap, McNemar, Holm
-run_eval.py         # Main runner: arms × tasks → JSONL (round-robin schedule)
-analyze.py          # Paired diffs, Holm-adjusted p-values, per-subject breakdown, Pareto plot
-results/            # Per-run JSONL outputs, summary.{json,txt}, pareto.png, run logs
-README.md           # This document — the study writeup
+ollama_client.py       # Thin wrapper around Ollama with deterministic sampling
+tasks.py               # Task loaders (MMLU subset, CoNLL-2003 NER)
+scoring.py             # Wilson + bootstrap CIs, paired bootstrap, McNemar, Holm
+run_eval.py            # Main runner: arms × tasks → JSONL (round-robin schedule)
+analyze.py             # Paired diffs, Holm-adjusted p-values, per-subject breakdown, Pareto plot
+tests/                 # pytest suite for scoring.py and tasks.py (45 tests)
+results/               # Per-run JSONL outputs, summary.{json,txt}, pareto.png, run logs
+requirements.txt       # Runtime deps
+requirements-dev.txt   # Adds pytest for the test suite
+pyproject.toml         # pytest config
+LICENSE                # MIT
+README.md              # This document — the study writeup
+```
+
+To run the tests:
+
+```bash
+pip install -r requirements-dev.txt
+pytest
 ```
 
 To reproduce:
