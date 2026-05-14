@@ -88,8 +88,9 @@ Based on these results, here's the call I'd make as a PM choosing a quantization
 
 **Pick Q4_K_M only when:**
 - Throughput is the binding constraint and a measurable F1 hit on structured extraction is acceptable downstream (human review, retry logic, low-stakes outputs).
-- The workload is **not** structured information extraction. The 5pp NER gap is significant; Q4 emits well-formed JSON with the wrong entities, which is harder to detect downstream than malformed output.
 - Memory is the binding constraint: Q4_K_M's ~5 GB footprint vs. FP16's ~16 GB matters on memory-limited machines (laptops, edge, or multi-tenant serving).
+
+> Avoid Q4_K_M for structured information extraction. The 5pp NER gap is significant, and Q4 emits well-formed JSON with the wrong entities — harder to detect downstream than malformed output.
 
 **Stay at FP16 when:**
 - Accuracy is the binding constraint (regulated outputs, safety-critical, eval ground truth).
