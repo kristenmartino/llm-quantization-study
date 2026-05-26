@@ -4,13 +4,15 @@
 
 Kristen Martino · [kristenmartino.ai](https://kristenmartino.ai) · [Repo](https://github.com/kristenmartino/llm-quantization-study)
 
+[![tests](https://github.com/kristenmartino/llm-quantization-study/actions/workflows/test.yml/badge.svg)](https://github.com/kristenmartino/llm-quantization-study/actions/workflows/test.yml)
+
 ---
 
 ## TL;DR
 
 **Ship Q8_0 as the default for Llama 3.1 8B Instruct.** It's statistically indistinguishable from FP16 on both tasks — MMLU accuracy (Δ=−0.2pp, 95% CI: −0.8 to +0.4) and CoNLL-2003 NER F1 (Δ=+0.0003, 95% CI: −0.006 to +0.007) — at ~1.8× the throughput and roughly half the memory footprint. The strongest evidence in this study is for Q8_0 ≈ FP16, not for any quantization-vs-quantization degradation.
 
-**Reach for Q4_K_M only when memory or latency is binding *and* the workload doesn't include structured information extraction.** Q4_K_M loses 5.0pp F1 on NER (95% CI: 2.1–8.1pp; Holm-adjusted p=0.003) for an additional ~40% throughput (2.5× FP16 total) and an ~3× smaller memory footprint. The MMLU regression (1.6pp) does not reach significance. The non-obvious failure mode: Q4 emits well-formed JSON at a slightly *higher* parse rate than FP16, but selects the wrong entities — the brittleness is semantic, not syntactic.
+**Reach for Q4_K_M only when memory or latency is binding *and* the workload doesn't include structured information extraction.** Q4_K_M loses 5.0pp F1 on NER (95% CI: 2.1–8.1pp; Holm-adjusted p=0.003) for an additional ~40% throughput (2.5× FP16 total) and an ~3× smaller memory footprint. The MMLU regression (1.6pp) does not reach significance. The failure mode: Q4 emits well-formed JSON at a slightly *higher* parse rate than FP16, but selects the wrong entities — the brittleness is semantic, not syntactic.
 
 ## Why this matters for PMs
 
@@ -102,8 +104,6 @@ A non-obvious finding: the published intuition that "Q4 is fine for pattern-matc
 
 ## Limitations
 
-Honest caveats — flagging these is itself part of the methodological signal.
-
 - **Single model family.** Results may not generalize to other architectures (Mistral, Qwen, Gemma) or to the smaller/larger Llama 3.1 variants. Quantization-friendliness varies.
 - **English only.** No multilingual eval; quantization effects on non-English tokens can differ.
 - **Deterministic sampling.** Temperature=0 measures the model, not the user-facing distribution. Robustness check at temperature=0.7 would strengthen claims about production behavior.
@@ -139,6 +139,8 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
+**Prerequisites:** Python 3.9+ and [Ollama](https://ollama.com) installed locally. The `--task extraction` CLI choice runs the CoNLL-2003 NER eval — the argument name predates the swap from a synthetic structured-extraction task to NER and is retained for filename compatibility with `results/extraction_*.jsonl`.
+
 To reproduce:
 
 ```bash
@@ -147,8 +149,13 @@ cd llm-quantization-study
 pip install -r requirements.txt
 ollama pull llama3.1:8b-instruct-{fp16,q8_0,q4_K_M}
 python run_eval.py --task mmlu --n 500
-python run_eval.py --task extraction --n 300
+python run_eval.py --task extraction --n 300   # CoNLL-2003 NER
 python analyze.py
 ```
 
 Total LLM runtime: ~5.8 hours of generation across 3 arms × (500 MMLU + 300 NER) examples, mostly unattended. MMLU runs at ~3h22m wall, NER at ~2h35m.
+
+### Data sources
+
+- **MMLU** (`cais/mmlu`) — MIT license.
+- **CoNLL-2003** (`eriktks/conll2003`) — Reuters/RCV1 Data Use Agreement; research use only. Acknowledgment: Tjong Kim Sang & De Meulder (CoNLL 2003).
