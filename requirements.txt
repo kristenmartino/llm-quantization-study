@@ -1,5 +1,5 @@
 requests>=2.31
 numpy>=1.26
 matplotlib>=3.8
-datasets>=2.16
+datasets>=2.16,<3.0   # 3.0+ dropped loading-script support; eriktks/conll2003 needs one
 scipy>=1.11
