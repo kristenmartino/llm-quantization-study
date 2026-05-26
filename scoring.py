@@ -2,11 +2,16 @@
 
 Two CI flavors:
   - Wilson score interval for binary outcomes (MMLU accuracy)
-  - Bootstrap percentile interval for continuous outcomes (extraction F1)
+  - Bootstrap percentile interval for continuous outcomes (NER span-F1)
 
 The "headline" numbers in the writeup are not point estimates — they're effect
-sizes with CIs. "Q4 loses 3.2pp accuracy [95% CI: 1.8-4.6pp] vs FP16" beats
-"Q4 = 71.2%, FP16 = 74.4%" every time.
+sizes with CIs. "Q4 loses 5.0pp F1 on NER [95% CI: 2.1–8.1pp; Holm-adjusted
+p=0.003] vs FP16" beats "Q4 = 0.564, FP16 = 0.614" every time, and beats both
+by including the multiple-comparison-corrected p-value.
+
+Pairwise tests are paired (same examples scored across arms): McNemar for
+binary outcomes, paired bootstrap for continuous. Holm-Bonferroni adjusts
+the p-value family within each task.
 """
 
 from __future__ import annotations

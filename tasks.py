@@ -19,7 +19,7 @@ import hashlib
 import json
 import random
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable
 
 # datasets is the HuggingFace library; install via `pip install datasets`
 try:
@@ -89,8 +89,13 @@ Answer:"""
 def load_mmlu(n: int = 500, seed: int = 42) -> Task:
     """Load a stratified MMLU subset of size `n`.
 
-    Stratification: roughly equal counts per subject. If `n` doesn't divide
-    evenly, the remainder is filled by random sampling across subjects.
+    Stratification: equal counts per subject (per_subject = n // len(SUBJECTS)).
+    If `n` doesn't divide evenly into len(MMLU_SUBJECTS), the remainder is
+    taken from the first subject (high_school_mathematics) — a known
+    limitation that biases representation when n isn't a multiple of 10.
+    The study uses n=500 (perfectly divisible) so this path isn't exercised;
+    flagged in code rather than fixed because the fix would touch logic that
+    isn't load-bearing for the current run.
     """
     if load_dataset is None:
         raise RuntimeError("Install `datasets`: pip install datasets")
