@@ -18,7 +18,10 @@ import json
 import time
 from pathlib import Path
 
+import requests
+
 import ollama_client
+import provenance
 import tasks
 
 
@@ -33,8 +36,15 @@ ARM_TAGS = {
 def _run_one(
     task: tasks.Task, arm: str, ex: tasks.Example
 ) -> tuple[float, dict]:
-    """Run a single example for one arm. Returns (score, jsonl_record)."""
+    """Run a single example for one arm. Returns (score, jsonl_record).
+
+    Only *infrastructure* failures (HTTP/timeout/malformed response) are caught
+    and marked status="runtime_error" so analysis can exclude them rather than
+    score them as a wrong answer — a daemon timeout is not a model-quality
+    failure. A bug in the scorer raises (loud) instead of silently becoming 0.0.
+    """
     model_tag = ARM_TAGS[arm]
+    status = "ok"
     try:
         result = ollama_client.generate(
             model=model_tag,
@@ -43,16 +53,20 @@ def _run_one(
             max_tokens=task.max_tokens,
         )
         score = task.score_fn(result.text, ex.gold)
-    except Exception as exc:
-        # Don't let one bad call kill a 500-item run; record it and move on.
+    except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError) as exc:
+        # Infrastructure failure — record and move on, but don't conflate with
+        # a wrong model answer (analyze.py drops status != "ok" rows).
         result = None
         score = 0.0
-        print(f"[{arm}] example {ex.id} failed: {exc}")
+        status = "runtime_error"
+        print(f"[{arm}] example {ex.id} runtime error: {exc}")
 
     record = {
         "example_id": ex.id,
         "arm": arm,
         "task": task.name,
+        "status": status,
+        "model": model_tag,
         "score": score,
         "output": result.text if result else "",
         "gold": ex.gold,
@@ -111,8 +125,23 @@ def run_eval(
         print(f"[{arm}] warming up {ARM_TAGS[arm]}...")
         ollama_client.warmup(ARM_TAGS[arm])
 
-    # Resume: drop examples already complete across all arms.
+    # Record provenance (model digests, versions, host, sampling) so the
+    # cross-arm comparison is backed by recorded artifact identity. Best-effort.
+    try:
+        provenance.update_manifest(
+            results_dir / "experiment_manifest.json",
+            task.name, len(task.examples), ARM_TAGS, arms,
+            ollama_client.DEFAULT_SEED, ollama_client.SAMPLING_OPTIONS,
+        )
+        print(f"[manifest] wrote {results_dir / 'experiment_manifest.json'}")
+    except Exception as exc:  # provenance must never block the actual eval
+        print(f"[manifest] skipped ({exc})")
+
+    # Resume: per (arm, example) skip — idempotent, so a mid-example crash can't
+    # leave duplicate records. Examples complete across all arms are dropped up
+    # front to avoid re-iterating; partial examples re-run only the missing arms.
     examples = task.examples
+    existing: dict[str, set[str]] = {arm: set() for arm in arms}
     if resume:
         existing = {arm: _existing_ids(out_paths[arm]) for arm in arms}
         to_run = [
@@ -134,6 +163,8 @@ def run_eval(
         if schedule == "roundrobin":
             for i, ex in enumerate(examples):
                 for arm in arms:
+                    if resume and ex.id in existing[arm]:
+                        continue  # this arm already has this example — don't duplicate
                     score, record = _run_one(task, arm, ex)
                     handles[arm].write(json.dumps(record) + "\n")
                     handles[arm].flush()
@@ -152,6 +183,8 @@ def run_eval(
                 print(f"\n[{arm}] running {len(examples)} examples -> {out_paths[arm]}")
                 arm_start = time.time()
                 for i, ex in enumerate(examples):
+                    if resume and ex.id in existing[arm]:
+                        continue  # idempotent resume — skip already-recorded examples
                     score, record = _run_one(task, arm, ex)
                     handles[arm].write(json.dumps(record) + "\n")
                     handles[arm].flush()

@@ -9,9 +9,19 @@ differences, and writes:
 Pairwise differences exploit the paired (same-example, same-seed) design:
   - MMLU (binary):    McNemar's test for p-values; paired bootstrap for CIs.
                       Cluster-bootstrap on subjects for the overall task CI.
-  - NER (continuous): paired bootstrap for both p-values and CIs.
+  - NER:              two estimands are reported.
+                        * micro-F1 (canonical CoNLL): pool TP/FP/FN, then F1;
+                          paired bootstrap over examples for CIs/p-values.
+                        * macro-F1 (per-sentence): mean of per-example F1;
+                          paired bootstrap on the per-example deltas.
+                      micro is the primary/headline metric; macro is reported
+                      alongside because the gap between them localizes the
+                      failure mode (over-extraction on entity-free sentences).
 
 p-values are Holm-adjusted within each task (3 pairwise tests per task).
+
+Equivalence ("Q8_0 ≈ FP16") is a TOST result against a pre-declared ±1pp margin,
+not the absence of a significant test — see `equivalence` in the summary.
 
 Usage:
     python analyze.py
@@ -24,15 +34,22 @@ import statistics
 from dataclasses import asdict
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")  # headless: works in CI without a display
 import matplotlib.pyplot as plt
 
+import tasks
 from scoring import (
     DifferenceEstimate,
     bootstrap_interval,
     holm_adjust,
     mcnemar_test,
+    micro_f1_interval,
     paired_bootstrap_diff_ci,
     paired_bootstrap_pvalue,
+    paired_micro_f1_diff_ci,
+    paired_micro_f1_pvalue,
+    tost_equivalence,
     wilson_interval,
 )
 
@@ -40,7 +57,11 @@ from scoring import (
 RESULTS_DIR = Path("results")
 ARMS_ORDER = ["fp16", "q8_0", "q4_K_M"]   # used for consistent plot ordering
 TASKS = ["mmlu", "extraction"]
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
+
+# Pre-declared equivalence margins (set a priori, not after seeing the data):
+# ±1 percentage point on both MMLU accuracy and NER F1.
+EQUIVALENCE_MARGIN = 0.01
 
 
 def load_jsonl(path: Path) -> list[dict]:
@@ -48,22 +69,46 @@ def load_jsonl(path: Path) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
+def _dedup_rows(rows: list[dict], arm: str, warn: bool = True) -> tuple[dict[str, dict], int]:
+    """Map example_id -> row (last wins). Warns loudly if a file has duplicates.
+
+    A raw file with more rows than unique example_ids means either a resume
+    re-append or a source duplicate collapsed onto one id; either way the
+    collapse should be visible, not silent.
+    """
+    by_id: dict[str, dict] = {}
+    dup_ids: list[str] = []
+    for r in rows:
+        eid = r["example_id"]
+        if eid in by_id:
+            dup_ids.append(eid)
+        by_id[eid] = r
+    if dup_ids and warn:
+        shown = ", ".join(sorted(set(dup_ids))[:5])
+        print(f"  warning: {arm} has {len(dup_ids)} duplicate example_id record(s) "
+              f"(collapsed last-wins): {shown}")
+    return by_id, len(dup_ids)
+
+
 def _align_arms(
     arm_rows: dict[str, list[dict]],
-) -> tuple[list[str], dict[str, list[float]], list[str]]:
+) -> tuple[list[str], dict[str, list[float]], list[str], dict[str, dict[str, dict]]]:
     """Align rows across arms by example_id.
 
-    Returns (example_ids, scores_per_arm, subjects). Drops any example_id not
-    present in every arm; warns the count. The aligned order is stable: it
-    follows the order example_ids first appear in the first arm.
+    Returns (example_ids, scores_per_arm, subjects, by_id_per_arm). Drops any
+    example_id not present in every arm; warns the count. Within-arm duplicate
+    example_ids are detected and warned in `_dedup_rows`. The aligned order is
+    stable: it follows the order example_ids first appear in the first arm.
     """
     arms = list(arm_rows.keys())
     if not arms:
-        return [], {}, []
+        return [], {}, [], {}
 
-    by_id_per_arm: dict[str, dict[str, dict]] = {
-        arm: {r["example_id"]: r for r in rows} for arm, rows in arm_rows.items()
-    }
+    by_id_per_arm: dict[str, dict[str, dict]] = {}
+    for arm, rows in arm_rows.items():
+        by_id, _ = _dedup_rows(rows, arm)
+        by_id_per_arm[arm] = by_id
+
     first_arm_order = [r["example_id"] for r in arm_rows[arms[0]]]
     seen: set[str] = set()
     aligned_ids: list[str] = []
@@ -76,7 +121,6 @@ def _align_arms(
             aligned_ids.append(eid)
         else:
             dropped += 1
-    # Also count any IDs in other arms not in the first arm
     for arm in arms[1:]:
         for eid in by_id_per_arm[arm]:
             if eid not in seen:
@@ -92,7 +136,18 @@ def _align_arms(
         subjects.append(first_meta.get("subject", ""))
         for arm in arms:
             scores[arm].append(float(by_id_per_arm[arm][eid]["score"]))
-    return aligned_ids, scores, subjects
+    return aligned_ids, scores, subjects, by_id_per_arm
+
+
+def _arm_speed(rows: list[dict]) -> float:
+    """Mean tok/sec over deduplicated examples (one record per example_id)."""
+    by_id, _ = _dedup_rows(rows, "speed", warn=False)
+    speeds = [
+        r["timing"]["tokens_per_second"]
+        for r in by_id.values()
+        if r["timing"]["tokens_per_second"] > 0
+    ]
+    return statistics.mean(speeds) if speeds else 0.0
 
 
 def _pairwise_diffs(
@@ -101,11 +156,10 @@ def _pairwise_diffs(
     cluster_keys: list | None = None,
     n_bootstrap: int = 5000,
 ) -> list[DifferenceEstimate]:
-    """Compute paired pairwise differences for one task (or one subject slice).
+    """Paired pairwise differences for one per-example metric (with Holm).
 
-    Uses McNemar for binary p-values, paired bootstrap for continuous. CIs use
+    McNemar for binary p-values, paired bootstrap for continuous. CIs use
     paired bootstrap throughout (cluster-bootstrap if cluster_keys provided).
-    Holm-adjusted p-values are populated within the returned family.
     """
     arms_present = list(scores_per_arm.keys())
     estimates: list[DifferenceEstimate] = []
@@ -128,23 +182,53 @@ def _pairwise_diffs(
             de.p_value = p
             estimates.append(de)
 
-    # Holm adjustment within this family
     p_values = [de.p_value for de in estimates]
     if p_values:
-        adjusted = holm_adjust(p_values)
-        for de, p_adj in zip(estimates, adjusted):
+        for de, p_adj in zip(estimates, holm_adjust(p_values)):
             de.p_adj = p_adj
-
     return estimates
 
 
-def analyze_task(task: str) -> dict:
-    """Compute per-arm intervals + paired pairwise diffs (with Holm) for one task.
+def _micro_pairwise_diffs(
+    counts_per_arm: dict[str, list[tuple[int, int, int]]],
+    n_bootstrap: int = 5000,
+) -> list[DifferenceEstimate]:
+    """Paired pairwise corpus micro-F1 differences (with Holm) for NER."""
+    arms_present = list(counts_per_arm.keys())
+    estimates: list[DifferenceEstimate] = []
+    for i, arm_a in enumerate(arms_present):
+        for arm_b in arms_present[i + 1 :]:
+            ca, cb = counts_per_arm[arm_a], counts_per_arm[arm_b]
+            de = paired_micro_f1_diff_ci(ca, cb, arm_a, arm_b, n_resamples=n_bootstrap)
+            de.p_value = paired_micro_f1_pvalue(ca, cb, n_resamples=n_bootstrap)
+            estimates.append(de)
+    p_values = [de.p_value for de in estimates]
+    if p_values:
+        for de, p_adj in zip(estimates, holm_adjust(p_values)):
+            de.p_adj = p_adj
+    return estimates
 
-    For MMLU, also produces a per-subject breakdown and uses cluster-bootstrap
-    on subjects for the overall pairwise CIs (subjects are the cluster unit;
-    within-subject correlation is real, iid bootstrap underestimates variance).
-    """
+
+def _equivalence_tests(
+    scores_per_arm: dict[str, list[float]],
+    margin: float,
+    cluster_keys: list | None = None,
+) -> list[dict]:
+    """TOST equivalence for every arm pair on a per-example metric."""
+    arms_present = list(scores_per_arm.keys())
+    out: list[dict] = []
+    for i, arm_a in enumerate(arms_present):
+        for arm_b in arms_present[i + 1 :]:
+            res = tost_equivalence(
+                scores_per_arm[arm_a], scores_per_arm[arm_b], margin,
+                arm_a=arm_a, arm_b=arm_b, cluster_keys=cluster_keys,
+            )
+            out.append(asdict(res))
+    return out
+
+
+def analyze_task(task: str) -> dict:
+    """Compute per-arm intervals + paired pairwise diffs (with Holm) for one task."""
     is_binary = task == "mmlu"
 
     arm_rows: dict[str, list[dict]] = {}
@@ -155,48 +239,95 @@ def analyze_task(task: str) -> dict:
             print(f"  skipping {arm}: {path} not found")
             continue
         rows = load_jsonl(path)
+        # Drop infrastructure failures (status != "ok") so a daemon timeout is
+        # never scored as a wrong answer. Rows predating the status field count
+        # as "ok". This run has zero such rows; the guard is for future reruns.
+        n_raw = len(rows)
+        rows = [r for r in rows if r.get("status", "ok") == "ok"]
+        if len(rows) != n_raw:
+            print(f"  note: {arm} excluded {n_raw - len(rows)} runtime-error row(s)")
         arm_rows[arm] = rows
-        speeds = [
-            r["timing"]["tokens_per_second"]
-            for r in rows
-            if r["timing"]["tokens_per_second"] > 0
-        ]
-        arm_speed[arm] = statistics.mean(speeds) if speeds else 0.0
+        arm_speed[arm] = _arm_speed(rows)
 
     if not arm_rows:
         return {"task": task, "intervals": {}, "pairwise_diffs": [],
                 "speeds_tok_per_sec": {}, "n_per_arm": {},
                 "schema_version": SCHEMA_VERSION}
 
-    example_ids, scores_per_arm, subjects = _align_arms(arm_rows)
+    example_ids, scores_per_arm, subjects, by_id_per_arm = _align_arms(arm_rows)
 
-    # Per-arm point estimates with CIs (per-arm marginals — independent of pairing)
-    intervals = {}
-    for arm, scores in scores_per_arm.items():
-        ci_fn = wilson_interval if is_binary else bootstrap_interval
-        intervals[arm] = asdict(ci_fn(scores))
+    if is_binary:
+        return _analyze_mmlu(task, scores_per_arm, subjects, arm_speed, example_ids)
+    return _analyze_ner(task, scores_per_arm, by_id_per_arm, example_ids, arm_speed)
 
-    # Pairwise diffs: cluster-bootstrap on subjects for MMLU overall, plain paired for NER
-    cluster_keys = subjects if (is_binary and any(subjects)) else None
-    pair_estimates = _pairwise_diffs(
-        scores_per_arm, is_binary=is_binary, cluster_keys=cluster_keys,
-    )
 
+def _analyze_mmlu(task, scores_per_arm, subjects, arm_speed, example_ids) -> dict:
+    intervals = {arm: asdict(wilson_interval(s)) for arm, s in scores_per_arm.items()}
+    cluster_keys = subjects if any(subjects) else None
+    pair_estimates = _pairwise_diffs(scores_per_arm, is_binary=True, cluster_keys=cluster_keys)
     result: dict = {
         "task": task,
         "schema_version": SCHEMA_VERSION,
+        "primary_metric": "accuracy",
         "intervals": intervals,
         "pairwise_diffs": [asdict(d) for d in pair_estimates],
+        "equivalence_margin": EQUIVALENCE_MARGIN,
+        "equivalence": _equivalence_tests(scores_per_arm, EQUIVALENCE_MARGIN, cluster_keys),
         "speeds_tok_per_sec": arm_speed,
         "n_per_arm": {arm: len(s) for arm, s in scores_per_arm.items()},
         "n_aligned": len(example_ids),
     }
-
-    # Per-subject MMLU breakdown
-    if is_binary and any(subjects):
-        result["per_subject"] = _per_subject_breakdown(scores_per_arm, subjects, is_binary)
-
+    if any(subjects):
+        result["per_subject"] = _per_subject_breakdown(scores_per_arm, subjects, True)
     return result
+
+
+def _analyze_ner(task, scores_per_arm, by_id_per_arm, example_ids, arm_speed) -> dict:
+    arms = list(scores_per_arm.keys())
+    # Per-example (tp, fp, fn) for the canonical micro-F1, aligned across arms.
+    counts_per_arm: dict[str, list[tuple[int, int, int]]] = {arm: [] for arm in arms}
+    pr_per_arm: dict[str, dict] = {}
+    for arm in arms:
+        for eid in example_ids:
+            row = by_id_per_arm[arm][eid]
+            c = tasks.score_extraction_counts(row["output"], row["gold"])
+            counts_per_arm[arm].append((c["tp"], c["fp"], c["fn"]))
+        tp = sum(c[0] for c in counts_per_arm[arm])
+        fp = sum(c[1] for c in counts_per_arm[arm])
+        fn = sum(c[2] for c in counts_per_arm[arm])
+        pr_per_arm[arm] = {
+            "tp": tp, "fp": fp, "fn": fn,
+            "precision": (tp / (tp + fp)) if (tp + fp) else 0.0,
+            "recall": (tp / (tp + fn)) if (tp + fn) else 0.0,
+        }
+
+    # Primary = corpus micro-F1; secondary = per-sentence macro-F1.
+    intervals_micro = {arm: asdict(micro_f1_interval(counts_per_arm[arm])) for arm in arms}
+    intervals_macro = {arm: asdict(bootstrap_interval(scores_per_arm[arm])) for arm in arms}
+    diffs_micro = _micro_pairwise_diffs(counts_per_arm)
+    diffs_macro = _pairwise_diffs(scores_per_arm, is_binary=False)
+
+    return {
+        "task": task,
+        "schema_version": SCHEMA_VERSION,
+        "primary_metric": "micro_f1",
+        "intervals": intervals_micro,                     # primary (plotted/headline)
+        "pairwise_diffs": [asdict(d) for d in diffs_micro],
+        "intervals_macro": intervals_macro,               # secondary (brittleness)
+        "pairwise_diffs_macro": [asdict(d) for d in diffs_macro],
+        "precision_recall": pr_per_arm,
+        "equivalence_margin": EQUIVALENCE_MARGIN,
+        # Formal TOST runs on the per-example (macro) deltas; micro equivalence
+        # is asserted conservatively via the micro CI lying within the margin.
+        "equivalence": _equivalence_tests(scores_per_arm, EQUIVALENCE_MARGIN),
+        "equivalence_micro_within_margin": {
+            f"{d.arm_a}-{d.arm_b}": bool(d.lower > -EQUIVALENCE_MARGIN and d.upper < EQUIVALENCE_MARGIN)
+            for d in diffs_micro
+        },
+        "speeds_tok_per_sec": arm_speed,
+        "n_per_arm": {arm: len(s) for arm, s in scores_per_arm.items()},
+        "n_aligned": len(example_ids),
+    }
 
 
 def _per_subject_breakdown(
@@ -218,7 +349,6 @@ def _per_subject_breakdown(
             arm: asdict(wilson_interval(s) if is_binary else bootstrap_interval(s))
             for arm, s in arm_scores.items()
         }
-        # No clustering within a single subject — plain paired bootstrap
         pair_estimates = _pairwise_diffs(arm_scores, is_binary=is_binary)
         out[subj] = {
             "n": len(next(iter(arm_scores.values()))),
@@ -234,23 +364,45 @@ def format_summary(results: list[dict]) -> str:
     for res in results:
         lines.append(f"\n=== {res['task'].upper()} ===")
         lines.append(f"n per arm: {res['n_per_arm']}  (aligned: {res.get('n_aligned', '?')})")
-        lines.append("\nPer-arm performance (95% CI):")
+        primary = res.get("primary_metric", "accuracy")
+        label = {"accuracy": "accuracy", "micro_f1": "micro-F1 (canonical CoNLL)"}.get(primary, primary)
+        lines.append(f"\nPer-arm {label} (95% CI):")
         for arm, est in res["intervals"].items():
+            extra = ""
+            pr = res.get("precision_recall", {}).get(arm)
+            if pr:
+                extra = f"  P={pr['precision']:.3f} R={pr['recall']:.3f}"
             lines.append(
                 f"  {arm:8s}  {est['mean']:.4f}  "
                 f"[{est['lower']:.4f}, {est['upper']:.4f}]  "
-                f"speed={res['speeds_tok_per_sec'].get(arm, 0):.1f} tok/s"
+                f"speed={res['speeds_tok_per_sec'].get(arm, 0):.1f} tok/s{extra}"
             )
-        lines.append("\nPaired pairwise differences (95% CI; * = Holm-adjusted p<0.05):")
+        lines.append(f"\nPaired pairwise differences — {label} (95% CI; * = Holm p<0.05):")
         for d in res["pairwise_diffs"]:
             lines.append("  " + _format_diff(d))
 
+        if "intervals_macro" in res:
+            lines.append("\nSecondary: per-sentence (macro) F1 (95% CI):")
+            for arm, est in res["intervals_macro"].items():
+                lines.append(f"  {arm:8s}  {est['mean']:.4f}  [{est['lower']:.4f}, {est['upper']:.4f}]")
+            lines.append("\nPaired pairwise differences — macro F1 (95% CI; * = Holm p<0.05):")
+            for d in res["pairwise_diffs_macro"]:
+                lines.append("  " + _format_diff(d))
+
+        if res.get("equivalence"):
+            margin = res.get("equivalence_margin", EQUIVALENCE_MARGIN)
+            lines.append(f"\nEquivalence (TOST, ±{margin:g} margin on per-example metric):")
+            for e in res["equivalence"]:
+                verdict = "EQUIVALENT" if e["equivalent"] else "not established"
+                lines.append(
+                    f"  {e['arm_a']} ≈ {e['arm_b']}: {verdict}  "
+                    f"diff={e['diff']:+.4f} 90%CI[{e['lower']:+.4f},{e['upper']:+.4f}] "
+                    f"p_TOST={e['p_tost']:.4g}"
+                )
+
         if "per_subject" in res:
             lines.append("\nPer-subject MMLU effects (sorted by Q4-FP16 Δ):")
-            ranked = sorted(
-                res["per_subject"].items(),
-                key=lambda kv: _q4_minus_fp16(kv[1]),
-            )
+            ranked = sorted(res["per_subject"].items(), key=lambda kv: _q4_minus_fp16(kv[1]))
             for subj, sub in ranked:
                 q4_fp = _q4_minus_fp16(sub)
                 fp16_acc = sub["intervals"].get("fp16", {}).get("mean", float("nan"))
@@ -274,14 +426,14 @@ def _format_diff(d: dict) -> str:
 def _q4_minus_fp16(per_subject_entry: dict) -> float:
     for d in per_subject_entry["pairwise_diffs"]:
         if d["arm_a"] == "fp16" and d["arm_b"] == "q4_K_M":
-            return -d["diff"]  # report q4 - fp16
+            return -d["diff"]
         if d["arm_a"] == "q4_K_M" and d["arm_b"] == "fp16":
             return d["diff"]
     return 0.0
 
 
 def plot_pareto(results: list[dict], out_path: Path) -> None:
-    """Quality-vs-cost frontier across arms, one panel per task."""
+    """Quality-vs-cost frontier across arms, one panel per task (primary metric)."""
     fig, axes = plt.subplots(1, len(results), figsize=(6 * len(results), 5))
     if len(results) == 1:
         axes = [axes]
@@ -295,20 +447,17 @@ def plot_pareto(results: list[dict], out_path: Path) -> None:
             ci_low = res["intervals"][arm]["lower"]
             ci_high = res["intervals"][arm]["upper"]
             ax.errorbar(
-                speed,
-                quality,
+                speed, quality,
                 yerr=[[quality - ci_low], [ci_high - quality]],
-                fmt="o",
-                markersize=10,
-                capsize=5,
-                label=arm,
+                fmt="o", markersize=10, capsize=5, label=arm,
             )
-            ax.annotate(
-                arm, (speed, quality),
-                textcoords="offset points", xytext=(8, 8), fontsize=11,
-            )
+            ax.annotate(arm, (speed, quality),
+                        textcoords="offset points", xytext=(8, 8), fontsize=11)
         ax.set_xlabel("Inference speed (tokens/sec)")
-        ax.set_ylabel("Accuracy" if res["task"] == "mmlu" else "Span-F1 (CoNLL)")
+        if res["task"] == "mmlu":
+            ax.set_ylabel("Accuracy")
+        else:
+            ax.set_ylabel("Span-F1 (micro, CoNLL)")
         ax.set_title(f"{res['task']}: quality vs. cost")
         ax.grid(True, alpha=0.3)
 
@@ -331,17 +480,14 @@ def main() -> None:
         print("No results to analyze. Run the eval first.")
         return
 
-    # Write machine-readable summary
     with (RESULTS_DIR / "summary.json").open("w") as f:
         json.dump(results, f, indent=2)
 
-    # Write human-readable summary
     summary_text = format_summary(results)
     with (RESULTS_DIR / "summary.txt").open("w") as f:
         f.write(summary_text)
     print(summary_text)
 
-    # Plot
     plot_pareto(results, RESULTS_DIR / "pareto.png")
 
 
