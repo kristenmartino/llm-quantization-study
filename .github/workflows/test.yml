@@ -7,8 +7,35 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.9', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        run: pytest
+
+  results-integrity:
+    # No model/Ollama needed — replays analyze.py against the committed raw
+    # outputs and asserts summary.json reproduces, so the published numbers
+    # can't silently drift from the committed evidence.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -19,8 +46,8 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: Install dev dependencies
-        run: pip install -r requirements-dev.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Run pytest
-        run: pytest
+      - name: Validate results reproduce from committed data
+        run: python scripts/check_results.py

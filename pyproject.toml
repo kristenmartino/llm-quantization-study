@@ -1,3 +1,9 @@
+[project]
+name = "llm-quantization-study"
+version = "1.0.0"
+description = "Controlled paired study of Llama 3.1 8B quantization (FP16/Q8_0/Q4_K_M) on MMLU and CoNLL-2003 NER"
+requires-python = ">=3.9"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

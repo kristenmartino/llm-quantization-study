@@ -17,13 +17,19 @@ import pytest
 
 from scoring import (
     DifferenceEstimate,
+    EquivalenceResult,
     bootstrap_interval,
     holm_adjust,
     mcnemar_test,
+    micro_f1_interval,
     paired_bootstrap_diff_ci,
     paired_bootstrap_pvalue,
     paired_bootstrap_resamples,
+    paired_micro_f1_diff_ci,
+    paired_micro_f1_pvalue,
+    tost_equivalence,
     wilson_interval,
+    _micro_f1,
 )
 
 
@@ -200,3 +206,89 @@ class TestDifferenceEstimate:
 
         not_sig = DifferenceEstimate(arm_a="a", arm_b="b", diff=0.01, lower=-0.05, upper=0.07)
         assert "*" not in str(not_sig)
+
+
+class TestMicroF1:
+    """Corpus micro-F1: pooled TP/FP/FN, and its difference from macro F1."""
+
+    def test_micro_f1_pooled_formula(self):
+        # 2*TP / (2*TP + FP + FN)
+        assert _micro_f1(10, 0, 0) == 1.0
+        assert _micro_f1(0, 5, 5) == 0.0
+        assert _micro_f1(5, 5, 0) == pytest.approx(2 * 5 / (2 * 5 + 5))
+        assert _micro_f1(0, 0, 0) == 0.0  # nothing to score
+
+    def test_micro_differs_from_macro_on_skewed_counts(self):
+        # One entity-rich sentence scored perfectly, two empty sentences where the
+        # model hallucinated one spurious entity each. Macro (mean per-sentence F1)
+        # is dragged down hard by the two zeros; micro dilutes the 2 FP across the
+        # large TP pool. This is the exact mechanism behind the study's 3.2 vs 5.0pp.
+        counts = [(10, 0, 0), (0, 1, 0), (0, 1, 0)]  # (tp, fp, fn) per sentence
+        micro = micro_f1_interval(counts, n_resamples=200).mean
+        macro = (1.0 + 0.0 + 0.0) / 3
+        assert micro > 0.9            # pooled: 20/22
+        assert macro == pytest.approx(1 / 3)
+        assert micro - macro > 0.5    # they genuinely diverge
+
+    def test_micro_interval_brackets_point_and_is_ordered(self):
+        counts = [(3, 1, 1)] * 50
+        est = micro_f1_interval(counts, n_resamples=500)
+        assert est.lower <= est.mean <= est.upper
+        assert est.n == 50
+
+    def test_paired_micro_identical_arms_zero_diff(self):
+        counts = [(2, 1, 0), (0, 0, 1), (3, 0, 2)] * 20
+        de = paired_micro_f1_diff_ci(counts, counts, "a", "b", n_resamples=500)
+        assert de.diff == pytest.approx(0.0, abs=1e-9)
+        assert de.lower <= 0 <= de.upper
+        assert paired_micro_f1_pvalue(counts, counts, n_resamples=500) > 0.5
+
+    def test_paired_micro_detects_real_gap(self):
+        good = [(4, 0, 0)] * 60
+        bad = [(2, 2, 2)] * 60
+        de = paired_micro_f1_diff_ci(good, bad, "good", "bad", n_resamples=1000)
+        assert de.diff > 0.3
+        assert de.lower > 0  # CI excludes zero
+        assert paired_micro_f1_pvalue(good, bad, n_resamples=1000) < 0.05
+
+    def test_paired_micro_length_mismatch_raises(self):
+        with pytest.raises(ValueError):
+            paired_micro_f1_diff_ci([(1, 0, 0)], [(1, 0, 0), (0, 1, 0)], "a", "b")
+
+
+class TestTostEquivalence:
+    """Two one-sided tests: equivalence is a positive claim, not non-significance."""
+
+    def test_identical_arms_are_equivalent(self):
+        scores = [1.0, 0.0, 1.0, 1.0, 0.0] * 40
+        res = tost_equivalence(scores, scores, margin=0.05, arm_a="a", arm_b="b")
+        assert isinstance(res, EquivalenceResult)
+        assert res.equivalent is True
+        assert res.p_tost < 0.05
+        assert res.lower <= 0 <= res.upper
+
+    def test_large_difference_is_not_equivalent(self):
+        a = [1.0] * 100
+        b = [0.0] * 100
+        res = tost_equivalence(a, b, margin=0.05)
+        assert res.equivalent is False
+        assert res.p_tost > 0.05
+
+    def test_tiny_difference_within_margin_is_equivalent(self):
+        # ~0.2pp difference, well inside a ±1pp margin -> equivalent
+        a = [1.0] * 500 + [0.0] * 500
+        b = [1.0] * 499 + [0.0] * 501
+        res = tost_equivalence(a, b, margin=0.01)
+        assert res.equivalent is True
+
+    def test_margin_too_tight_fails_equivalence(self):
+        # Same small difference, but a margin tighter than the CI -> not established
+        a = [1.0] * 500 + [0.0] * 500
+        b = [1.0] * 480 + [0.0] * 520
+        res = tost_equivalence(a, b, margin=0.005)
+        assert res.equivalent is False
+
+    def test_str_reports_verdict(self):
+        scores = [0.6, 0.6, 0.6] * 50
+        res = tost_equivalence(scores, scores, margin=0.05, arm_a="q8", arm_b="fp16")
+        assert "q8" in str(res) and "fp16" in str(res)

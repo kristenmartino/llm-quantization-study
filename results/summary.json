@@ -1,7 +1,8 @@
 [
   {
     "task": "mmlu",
-    "schema_version": 2,
+    "schema_version": 3,
+    "primary_metric": "accuracy",
     "intervals": {
       "fp16": {
         "mean": 0.5851703406813628,
@@ -60,10 +61,46 @@
         "n_pairs": 499
       }
     ],
+    "equivalence_margin": 0.01,
+    "equivalence": [
+      {
+        "arm_a": "fp16",
+        "arm_b": "q8_0",
+        "diff": -0.002004008016032064,
+        "margin": 0.01,
+        "p_tost": 0.0186,
+        "lower": -0.008032128514056224,
+        "upper": 0.004,
+        "equivalent": true,
+        "n_pairs": 499
+      },
+      {
+        "arm_a": "fp16",
+        "arm_b": "q4_K_M",
+        "diff": 0.01603206412825651,
+        "margin": 0.01,
+        "p_tost": 0.7163,
+        "lower": -0.002004008016032064,
+        "upper": 0.034,
+        "equivalent": false,
+        "n_pairs": 499
+      },
+      {
+        "arm_a": "q8_0",
+        "arm_b": "q4_K_M",
+        "diff": 0.018036072144288578,
+        "margin": 0.01,
+        "p_tost": 0.7941,
+        "lower": 0.002,
+        "upper": 0.03406813627254509,
+        "equivalent": false,
+        "n_pairs": 499
+      }
+    ],
     "speeds_tok_per_sec": {
-      "fp16": 40.86046984414092,
-      "q8_0": 72.6631154999294,
-      "q4_K_M": 102.93197603241417
+      "fp16": 40.85449663488989,
+      "q8_0": 72.65757311348337,
+      "q4_K_M": 102.88676523371565
     },
     "n_per_arm": {
       "fp16": 499,
@@ -686,8 +723,67 @@
   },
   {
     "task": "extraction",
-    "schema_version": 2,
+    "schema_version": 3,
+    "primary_metric": "micro_f1",
     "intervals": {
+      "fp16": {
+        "mean": 0.6489459211732356,
+        "lower": 0.6003935107773691,
+        "upper": 0.6954891909474185,
+        "n": 300
+      },
+      "q8_0": {
+        "mean": 0.6519337016574586,
+        "lower": 0.6036725541757612,
+        "upper": 0.6982150689223057,
+        "n": 300
+      },
+      "q4_K_M": {
+        "mean": 0.6172839506172839,
+        "lower": 0.5672163677949639,
+        "upper": 0.6644851132630419,
+        "n": 300
+      }
+    },
+    "pairwise_diffs": [
+      {
+        "arm_a": "fp16",
+        "arm_b": "q8_0",
+        "diff": -0.0029877804842229905,
+        "lower": -0.008903957473490999,
+        "upper": 0.0023067491004294454,
+        "p_value": 0.2938,
+        "p_adj": 0.2938,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "fp16",
+        "arm_b": "q4_K_M",
+        "diff": 0.03166197055595166,
+        "lower": 0.006620914019926037,
+        "upper": 0.05742900647384217,
+        "p_value": 0.0158,
+        "p_adj": 0.0316,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "q8_0",
+        "arm_b": "q4_K_M",
+        "diff": 0.03464975104017465,
+        "lower": 0.00932960529393748,
+        "upper": 0.0603309835557837,
+        "p_value": 0.01,
+        "p_adj": 0.03,
+        "lower_adj": null,
+        "upper_adj": null,
+        "n_pairs": 300
+      }
+    ],
+    "intervals_macro": {
       "fp16": {
         "mean": 0.6140923520923521,
         "lower": 0.5696394901394901,
@@ -707,7 +803,7 @@
         "n": 300
       }
     },
-    "pairwise_diffs": [
+    "pairwise_diffs_macro": [
       {
         "arm_a": "fp16",
         "arm_b": "q8_0",
@@ -745,6 +841,70 @@
         "n_pairs": 300
       }
     ],
+    "precision_recall": {
+      "fp16": {
+        "tp": 354,
+        "fp": 286,
+        "fn": 97,
+        "precision": 0.553125,
+        "recall": 0.7849223946784922
+      },
+      "q8_0": {
+        "tp": 354,
+        "fp": 281,
+        "fn": 97,
+        "precision": 0.5574803149606299,
+        "recall": 0.7849223946784922
+      },
+      "q4_K_M": {
+        "tp": 350,
+        "fp": 333,
+        "fn": 101,
+        "precision": 0.5124450951683748,
+        "recall": 0.7760532150776053
+      }
+    },
+    "equivalence_margin": 0.01,
+    "equivalence": [
+      {
+        "arm_a": "fp16",
+        "arm_b": "q8_0",
+        "diff": 0.0003412698412698417,
+        "margin": 0.01,
+        "p_tost": 0.0021,
+        "lower": -0.005092592592592592,
+        "upper": 0.005674603174603174,
+        "equivalent": true,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "fp16",
+        "arm_b": "q4_K_M",
+        "diff": 0.05036147186147187,
+        "margin": 0.01,
+        "p_tost": 0.9951,
+        "lower": 0.02504616402116402,
+        "upper": 0.07629469696969696,
+        "equivalent": false,
+        "n_pairs": 300
+      },
+      {
+        "arm_a": "q8_0",
+        "arm_b": "q4_K_M",
+        "diff": 0.05002020202020203,
+        "margin": 0.01,
+        "p_tost": 0.9938,
+        "lower": 0.024201743626743624,
+        "upper": 0.07674230399230397,
+        "equivalent": false,
+        "n_pairs": 300
+      }
+    ],
+    "equivalence_micro_within_margin": {
+      "fp16-q8_0": true,
+      "fp16-q4_K_M": false,
+      "q8_0-q4_K_M": false
+    },
     "speeds_tok_per_sec": {
       "fp16": 20.694125730086903,
       "q8_0": 38.840367232679014,
