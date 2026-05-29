@@ -19,6 +19,15 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_TIMEOUT = 300  # seconds; quantized 8B models should respond well within this
 DEFAULT_SEED = 42
 
+# Sampling held constant across arms — the single source of truth, also recorded
+# in the experiment manifest. seed and num_predict are per-call (added below).
+SAMPLING_OPTIONS = {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": 0,
+    "repeat_penalty": 1.0,
+}
+
 
 @dataclass
 class GenerationResult:
@@ -56,12 +65,9 @@ def generate(
         "prompt": prompt,
         "stream": False,
         "options": {
-            "temperature": 0.0,
+            **SAMPLING_OPTIONS,
             "seed": seed,
             "num_predict": max_tokens,
-            "top_p": 1.0,
-            "top_k": 0,
-            "repeat_penalty": 1.0,
         },
     }
     if system is not None:

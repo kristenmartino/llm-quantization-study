@@ -1,13 +1,26 @@
 """Statistics for the eval: confidence intervals and pairwise differences.
 
-Two CI flavors:
+CI flavors:
   - Wilson score interval for binary outcomes (MMLU accuracy)
-  - Bootstrap percentile interval for continuous outcomes (NER span-F1)
+  - Bootstrap percentile interval for continuous per-example outcomes (macro F1)
+  - Corpus micro-F1 with bootstrap CI for NER (the canonical CoNLL metric;
+    pools TP/FP/FN across examples rather than averaging per-example F1)
 
 The "headline" numbers in the writeup are not point estimates — they're effect
-sizes with CIs. "Q4 loses 5.0pp F1 on NER [95% CI: 2.1–8.1pp; Holm-adjusted
-p=0.003] vs FP16" beats "Q4 = 0.564, FP16 = 0.614" every time, and beats both
-by including the multiple-comparison-corrected p-value.
+sizes with CIs. "Q4 loses 3.2pp corpus micro-F1 on NER [95% CI: 0.6–5.8pp;
+Holm-adjusted p=0.034] vs FP16" beats "Q4 = 0.617, FP16 = 0.649" every time,
+and beats both by including the multiple-comparison-corrected p-value.
+
+Two F1 estimands are reported for NER and they answer different questions:
+  - micro (canonical): pooled entity-level F1 — the benchmark-standard number.
+  - macro (per-sentence): mean of per-example F1 — weights every sentence
+    equally, so it surfaces per-request brittleness (e.g. over-extraction on
+    entity-free sentences) that micro dilutes across the corpus.
+
+Equivalence (e.g. "Q8_0 ≈ FP16") is a TOST claim against a pre-declared margin,
+not the absence of a significant difference. `tost_equivalence` implements the
+two one-sided tests; a non-significant pairwise test is NOT evidence of
+equivalence on its own.
 
 Pairwise tests are paired (same examples scored across arms): McNemar for
 binary outcomes, paired bootstrap for continuous. Holm-Bonferroni adjusts
@@ -293,5 +306,173 @@ def holm_adjust(p_values: list[float]) -> list[float]:
         running_max = max(running_max, adj)
         adjusted[i] = running_max
     return adjusted
+
+
+# ---------------------------------------------------------------------------
+# Corpus micro-F1 (the canonical CoNLL NER metric: pool TP/FP/FN, then F1)
+# ---------------------------------------------------------------------------
+#
+# Per-example (macro) F1 averages each sentence's F1 equally. The canonical
+# CoNLL/conlleval score instead pools counts across the whole corpus and
+# computes one F1 — entity-rich sentences carry proportionally more weight.
+# The two diverge when errors concentrate in particular sentence types (e.g.
+# over-extraction on entity-free sentences inflates macro relative to micro),
+# so the study reports both. Inputs here are per-example (tp, fp, fn) triples.
+
+def _micro_f1(tp: float, fp: float, fn: float) -> float:
+    """Pooled F1 from summed counts. Returns 0.0 when there is nothing to score."""
+    denom = 2 * tp + fp + fn
+    return (2 * tp / denom) if denom > 0 else 0.0
+
+
+def _counts_array(counts) -> np.ndarray:
+    arr = np.asarray(counts, dtype=float)
+    if arr.size == 0:
+        return arr.reshape(0, 3)
+    return arr.reshape(-1, 3)
+
+
+def micro_f1_interval(
+    counts, n_resamples: int = 5000, seed: int = 42, confidence: float = 0.95,
+) -> IntervalEstimate:
+    """Corpus micro-F1 point estimate with a bootstrap percentile CI.
+
+    `counts` is a sequence of (tp, fp, fn) per example. The bootstrap resamples
+    examples with replacement and re-pools the counts each draw, so the CI
+    reflects sentence-level sampling variability in the pooled metric.
+    """
+    arr = _counts_array(counts)
+    n = len(arr)
+    if n == 0:
+        return IntervalEstimate(mean=0.0, lower=0.0, upper=0.0, n=0)
+    point = _micro_f1(*arr.sum(axis=0))
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n, size=(n_resamples, n))
+    sums = arr[idx].sum(axis=1)  # (n_resamples, 3)
+    denom = 2 * sums[:, 0] + sums[:, 1] + sums[:, 2]
+    boots = np.where(denom > 0, 2 * sums[:, 0] / denom, 0.0)
+    alpha = (1 - confidence) / 2
+    return IntervalEstimate(
+        mean=point,
+        lower=float(np.quantile(boots, alpha)),
+        upper=float(np.quantile(boots, 1 - alpha)),
+        n=n,
+    )
+
+
+def paired_micro_f1_resamples(
+    counts_a, counts_b, n_resamples: int = 5000, seed: int = 42,
+) -> tuple[float, np.ndarray]:
+    """Resample examples (paired) and return (observed micro-F1 diff, resamples).
+
+    Same resampled example indices are applied to both arms, preserving the
+    paired design; each draw re-pools counts and takes the micro-F1 difference.
+    """
+    a = _counts_array(counts_a)
+    b = _counts_array(counts_b)
+    if len(a) != len(b):
+        raise ValueError("counts_a and counts_b must be the same length (paired)")
+    n = len(a)
+    obs = _micro_f1(*a.sum(axis=0)) - _micro_f1(*b.sum(axis=0)) if n else 0.0
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, n, size=(n_resamples, n)) if n else np.zeros((n_resamples, 0), int)
+
+    def pooled(arr: np.ndarray) -> np.ndarray:
+        s = arr[idx].sum(axis=1)
+        d = 2 * s[:, 0] + s[:, 1] + s[:, 2]
+        return np.where(d > 0, 2 * s[:, 0] / d, 0.0)
+
+    res = pooled(a) - pooled(b) if n else np.zeros(n_resamples)
+    return obs, res
+
+
+def paired_micro_f1_diff_ci(
+    counts_a, counts_b, arm_a: str, arm_b: str,
+    n_resamples: int = 5000, seed: int = 42, confidence: float = 0.95,
+) -> DifferenceEstimate:
+    """Paired bootstrap CI on the corpus micro-F1 difference (arm_a − arm_b)."""
+    obs, res = paired_micro_f1_resamples(counts_a, counts_b, n_resamples, seed)
+    alpha = (1 - confidence) / 2
+    return DifferenceEstimate(
+        arm_a=arm_a, arm_b=arm_b, diff=float(obs),
+        lower=float(np.quantile(res, alpha)),
+        upper=float(np.quantile(res, 1 - alpha)),
+        n_pairs=len(_counts_array(counts_a)),
+    )
+
+
+def paired_micro_f1_pvalue(
+    counts_a, counts_b, n_resamples: int = 10000, seed: int = 42,
+) -> float:
+    """Two-sided bootstrap p-value for the paired micro-F1 difference (H0: diff=0)."""
+    obs, res = paired_micro_f1_resamples(counts_a, counts_b, n_resamples, seed)
+    centered = res - obs
+    return float(min(1.0, max(0.0, np.mean(np.abs(centered) >= abs(obs)))))
+
+
+# ---------------------------------------------------------------------------
+# TOST equivalence (for "arm A is practically equivalent to arm B")
+# ---------------------------------------------------------------------------
+
+@dataclass
+class EquivalenceResult:
+    """Result of a two one-sided test for practical equivalence."""
+    arm_a: str
+    arm_b: str
+    diff: float
+    margin: float
+    p_tost: float          # max of the two one-sided p-values
+    lower: float           # (1 - 2*alpha) CI, the interval TOST checks
+    upper: float
+    equivalent: bool
+    n_pairs: int | None = None
+
+    def __str__(self) -> str:
+        verdict = "EQUIVALENT" if self.equivalent else "not established"
+        return (
+            f"{self.arm_a} ≈ {self.arm_b}? {verdict} at ±{self.margin:g}: "
+            f"diff={self.diff:+.4f}, {int(round((1 - 2 * 0.05) * 100))}% CI "
+            f"[{self.lower:+.4f}, {self.upper:+.4f}], p_TOST={self.p_tost:.4g}"
+        )
+
+
+def tost_equivalence(
+    scores_a: list[float],
+    scores_b: list[float],
+    margin: float,
+    arm_a: str = "A",
+    arm_b: str = "B",
+    n_resamples: int = 10000,
+    seed: int = 42,
+    cluster_keys: list | None = None,
+    alpha: float = 0.05,
+) -> EquivalenceResult:
+    """Two one-sided tests (Schuirmann) for equivalence of a paired mean diff.
+
+    Equivalence at ±`margin` is declared when both one-sided nulls are rejected
+    at `alpha` — equivalently, when the (1 − 2·alpha) bootstrap CI for the paired
+    difference lies entirely inside (−margin, +margin). This is the correct claim
+    for "A ≈ B"; a non-significant difference test does NOT establish equivalence.
+    The two one-sided p-values are estimated from the bootstrap distribution
+    re-centered at each margin boundary; `p_tost` is their max.
+    """
+    diff_obs, resamples = paired_bootstrap_resamples(
+        scores_a, scores_b, n_resamples=n_resamples,
+        seed=seed, cluster_keys=cluster_keys,
+    )
+    centered = resamples - diff_obs
+    # H0_lower: diff <= -margin  (reject toward diff > -margin)
+    p_lower = float(np.mean(centered >= diff_obs + margin))
+    # H0_upper: diff >= +margin  (reject toward diff < +margin)
+    p_upper = float(np.mean(centered <= diff_obs - margin))
+    p_tost = float(min(1.0, max(p_lower, p_upper)))
+    lo = float(np.quantile(resamples, alpha))
+    hi = float(np.quantile(resamples, 1 - alpha))
+    return EquivalenceResult(
+        arm_a=arm_a, arm_b=arm_b, diff=float(diff_obs), margin=float(margin),
+        p_tost=p_tost, lower=lo, upper=hi,
+        equivalent=bool(lo > -margin and hi < margin),
+        n_pairs=len(scores_a),
+    )
 
 
