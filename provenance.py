@@ -1,9 +1,9 @@
 """Capture experiment provenance into results/experiment_manifest.json.
 
 The study's headline is a comparison *across quantization tiers*. For that to be
-a clean comparison, the three Ollama tags must differ only in quantization — same
-base weights, tokenizer, and chat template. This module records the evidence for
-that assumption instead of leaving it implicit:
+a clean comparison, the three Ollama tags should differ only in quantization —
+ideally the same base weights, tokenizer, and chat template. This module records
+evidence for (it cannot fully prove) that assumption instead of leaving it implicit:
 
   - per-arm weight-blob sha256 (the three differ, as expected for distinct quants)
   - per-arm modelfile (shows identical stop tokens / template across arms)

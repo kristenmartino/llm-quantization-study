@@ -12,7 +12,7 @@ Kristen Martino · [kristenmartino.ai](https://kristenmartino.ai) · [Repo](http
 
 Scope: Llama 3.1 8B Instruct, two English tasks, deterministic decoding (temp=0), local Ollama on Apple Silicon/Metal. See [Limitations](#limitations).
 
-**Ship Q8_0 as the default.** It is *practically equivalent* to FP16 — not merely "not significantly different," but equivalent under a pre-declared ±1pp margin (TOST): MMLU accuracy Δ=−0.2pp (p_TOST=0.019) and NER macro-F1 Δ=+0.0003 (p_TOST=0.002) both clear the equivalence bar, and the NER micro-F1 95% CI [−0.9, +0.2]pp sits entirely inside ±1pp. You get this at ~1.8× the throughput and roughly half the memory footprint.
+**Ship Q8_0 as the default.** It is *practically equivalent* to FP16 — not merely "not significantly different," but equivalent under a specified ±1pp practical-equivalence margin (TOST): MMLU accuracy Δ=−0.2pp (p_TOST=0.019) and NER macro-F1 Δ=+0.0003 (p_TOST=0.002) both clear the equivalence bar, and the NER micro-F1 95% CI [−0.9, +0.2]pp sits entirely inside ±1pp. You get this at ~1.8× the throughput and roughly half the memory footprint.
 
 **Reach for Q4_K_M only when memory or latency is binding *and* the workload doesn't include structured information extraction.** Q4_K_M shows a measurable NER degradation — **−3.2pp on corpus micro-F1, the canonical CoNLL metric** (95% CI: 0.7–5.7pp; Holm-adjusted p=0.032) — with a larger **−5.0pp drop in mean per-sentence (macro) F1** (CI: 2.1–8.1pp; p=0.003). The gap between the two metrics localizes the failure: Q4 stays competitive on aggregate entity counts but more often fails *entity-free* sentences, hallucinating a spurious entity ~62% of the time vs ~40% for FP16/Q8. The hit is a precision problem (−4.1pp precision, −0.9pp recall), not a recall one — it over-extracts. The MMLU regression (1.6pp) does not reach significance. You buy this for ~40% more throughput (2.5× FP16) and an ~3× smaller footprint.
 
@@ -38,7 +38,7 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 - MMLU: Wilson 95% CI per arm on accuracy. Paired pairwise differences via paired bootstrap, with cluster-bootstrap on subjects for the overall CI (within-subject correlation is real). p-values from McNemar's test.
 - NER: corpus micro-F1 per arm with bootstrap CI (resample examples, re-pool counts); paired pairwise micro-F1 differences via paired bootstrap (CIs + two-sided p-values centered under H0). Per-sentence macro-F1 reported alongside with the same paired machinery on per-example deltas.
 - Multiple-comparison correction: Holm-Bonferroni applied per task across the 3 pairwise tests (separately for the micro and macro families).
-- **Equivalence.** "Q8_0 ≈ FP16" is a TOST result against a **pre-declared ±1pp margin** (set before analysis, not chosen to fit the data) — two one-sided tests, equivalently the 90% CI lying inside ±0.01. A non-significant difference is *not* treated as evidence of equivalence.
+- **Equivalence.** "Q8_0 ≈ FP16" is a TOST result against a **specified ±1pp practical-equivalence margin** — a round, interpretable threshold chosen for this equivalence reanalysis as the largest difference that would still count as "the same," not tuned to the observed intervals. Two one-sided tests, equivalently the 90% CI lying inside ±0.01. A non-significant difference is *not* treated as evidence of equivalence.
 
 **Power.** At n=499 aligned per arm on MMLU, detects ≥3.8pp accuracy differences at 80% power, α=0.05 (paired diff SD = 0.30 observed). At n=300 per arm on NER, detects per-sentence F1 differences ≥4.3pp (paired diff SD = 0.27 observed). Both post-hoc verified on the actual data.
 
@@ -74,7 +74,7 @@ micro-F1 is the canonical CoNLL metric (the headline); macro-F1 is the mean per-
 
 Significance markers (`*`) use the Holm-adjusted p-value within each task/metric's 3-test family at α=0.05. **The Q4_K_M NER degradation is significant under both F1 estimands** — micro (the canonical metric, ~3.2pp) and macro (per-sentence, ~5.0pp) — so the finding is robust to metric choice; the macro figure is larger because per-sentence averaging amplifies the entity-free-sentence failures (see below). All MMLU pairs are NS after Holm. The FP16 − Q8_0 contrasts are ~0 on every metric — and, formally, *equivalent*:
 
-### Equivalence: Q8_0 vs FP16 (TOST, pre-declared ±1pp margin)
+### Equivalence: Q8_0 vs FP16 (TOST, ±1pp practical-equivalence margin)
 
 | Metric                 | Δ (FP16 − Q8_0) | 90% CI (TOST)        | p_TOST | Verdict        |
 |------------------------|------------------|----------------------|--------|----------------|

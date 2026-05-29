@@ -20,8 +20,9 @@ Pairwise differences exploit the paired (same-example, same-seed) design:
 
 p-values are Holm-adjusted within each task (3 pairwise tests per task).
 
-Equivalence ("Q8_0 ≈ FP16") is a TOST result against a pre-declared ±1pp margin,
-not the absence of a significant test — see `equivalence` in the summary.
+Equivalence ("Q8_0 ≈ FP16") is a TOST result against a specified ±1pp
+practical-equivalence margin, not the absence of a significant test — see
+`equivalence` in the summary.
 
 Usage:
     python analyze.py
@@ -59,8 +60,9 @@ ARMS_ORDER = ["fp16", "q8_0", "q4_K_M"]   # used for consistent plot ordering
 TASKS = ["mmlu", "extraction"]
 SCHEMA_VERSION = 3
 
-# Pre-declared equivalence margins (set a priori, not after seeing the data):
-# ±1 percentage point on both MMLU accuracy and NER F1.
+# Specified practical-equivalence margin: a round ±1pp threshold chosen as an
+# interpretable bound for this reanalysis (the largest difference that would
+# still count as "equivalent"), not tuned to the observed CIs.
 EQUIVALENCE_MARGIN = 0.01
 
 

@@ -17,10 +17,10 @@ Two F1 estimands are reported for NER and they answer different questions:
     equally, so it surfaces per-request brittleness (e.g. over-extraction on
     entity-free sentences) that micro dilutes across the corpus.
 
-Equivalence (e.g. "Q8_0 ≈ FP16") is a TOST claim against a pre-declared margin,
-not the absence of a significant difference. `tost_equivalence` implements the
-two one-sided tests; a non-significant pairwise test is NOT evidence of
-equivalence on its own.
+Equivalence (e.g. "Q8_0 ≈ FP16") is a TOST claim against a specified
+practical-equivalence margin, not the absence of a significant difference.
+`tost_equivalence` implements the two one-sided tests; a non-significant pairwise
+test is NOT evidence of equivalence on its own.
 
 Pairwise tests are paired (same examples scored across arms): McNemar for
 binary outcomes, paired bootstrap for continuous. Holm-Bonferroni adjusts
