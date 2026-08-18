@@ -10,9 +10,18 @@ on:
 permissions:
   contents: read
 
+# Supersede in-flight runs for the same pull request; pushing twice used to run
+# both to completion. Keyed by SHA on push so a branch/main run is never
+# cancelled — cancellation follows workflow start order, not commit order, so
+# cancelling a push run risks the newest commit never being the one validated.
+concurrency:
+  group: test-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +46,7 @@ jobs:
     # outputs and asserts summary.json reproduces, so the published numbers
     # can't silently drift from the committed evidence.
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
