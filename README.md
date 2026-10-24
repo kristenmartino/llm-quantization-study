@@ -120,19 +120,17 @@ None of the subject-level pairwise differences was statistically significant aft
 
 On the tested knowledge questions and entity-extraction sentences, Q8_0 met the study’s ±1 percentage-point equivalence criterion while generating tokens about 1.8× faster than FP16 on the M4 Max.
 
-These results make Q8_0 a candidate to evaluate for similar workloads. Choosing it for another application requires testing representative inputs and defining an acceptable quality difference.
-
 **Q4_K_M traded extraction quality for faster generation in this experiment.**
 
 Q4_K_M generated tokens about 40% faster than Q8_0 and had a model footprint of about 4.9 GB. Its extraction scores were lower than FP16 by 3.2 percentage points on corpus F1 and 5.0 points on sentence-average F1.
 
-The errors included extra entity predictions in otherwise valid JSON. For an application using structured extraction, evaluate these errors on representative inputs before deciding whether the speed and memory savings justify the quality loss.
+The errors included extra entity predictions in otherwise valid JSON.
 
 **FP16 served as the reference for this comparison.**
 
 The study did not establish a quality advantage for FP16 over Q8_0 on the two tested tasks. It also did not evaluate regulated or safety-critical applications.
 
-For another application, compare the candidate versions against independently verified answers and the application’s quality requirements.
+For another application, compare candidate versions on representative inputs against verified answers. Check extra entity predictions in structured extraction, and define an acceptable quality difference before choosing a version.
 
 In this run, Q4_K_M’s extraction scores declined significantly relative to FP16, while the MMLU accuracy difference was not statistically significant. The tasks differ in content, output format and scoring, so these results do not establish a general distinction between reasoning and pattern extraction.
 
@@ -140,7 +138,7 @@ In this run, Q4_K_M’s extraction scores declined significantly relative to FP1
 
 ## Limitations
 
-- **Single model family.** Results may not generalize to other architectures (Mistral, Qwen, Gemma) or to the smaller/larger Llama 3.1 variants. Quantization-friendliness varies.
+- **Single model.** The study tests Llama 3.1 8B Instruct. It does not evaluate other models or model sizes.
 - **English only.** No multilingual eval; quantization effects on non-English tokens can differ.
 - **Decoding settings.** Results use temperature 0 and seed 42. The study does not measure how output quality varies across seeds or nonzero-temperature sampling settings.
 - **No fine-tuned variants.** Domain-tuned models may behave differently under quantization than the base instruct.
