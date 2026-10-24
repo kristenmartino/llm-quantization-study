@@ -1,30 +1,12 @@
-"""Statistics for the eval: confidence intervals and pairwise differences.
+"""Statistical helpers for paired model evaluations.
 
-CI flavors:
-  - Wilson score interval for binary outcomes (MMLU accuracy)
-  - Bootstrap percentile interval for continuous per-example outcomes (macro F1)
-  - Corpus micro-F1 with bootstrap CI for NER (the canonical CoNLL metric;
-    pools TP/FP/FN across examples rather than averaging per-example F1)
+Includes Wilson intervals for binary accuracy, bootstrap intervals for
+sentence-average F1 and pooled corpus micro-F1, paired differences,
+McNemar tests, Holm adjustment, and bootstrap TOST equivalence checks.
 
-The "headline" numbers in the writeup are not point estimates — they're effect
-sizes with CIs. "Q4 loses 3.2pp corpus micro-F1 on NER [95% CI: 0.6–5.8pp;
-Holm-adjusted p=0.034] vs FP16" beats "Q4 = 0.617, FP16 = 0.649" every time,
-and beats both by including the multiple-comparison-corrected p-value.
-
-Two F1 estimands are reported for NER and they answer different questions:
-  - micro (canonical): pooled entity-level F1 — the benchmark-standard number.
-  - macro (per-sentence): mean of per-example F1 — weights every sentence
-    equally, so it surfaces per-request brittleness (e.g. over-extraction on
-    entity-free sentences) that micro dilutes across the corpus.
-
-Equivalence (e.g. "Q8_0 ≈ FP16") is a TOST claim against a specified
-practical-equivalence margin, not the absence of a significant difference.
-`tost_equivalence` implements the two one-sided tests; a non-significant pairwise
-test is NOT evidence of equivalence on its own.
-
-Pairwise tests are paired (same examples scored across arms): McNemar for
-binary outcomes, paired bootstrap for continuous. Holm-Bonferroni adjusts
-the p-value family within each task.
+Micro-F1 pools caller-supplied TP/FP/FN counts. In this study those counts
+come from normalized unique entity-text/type pairs, not position-based
+CoNLL mentions. Sentence-average F1 gives each sentence equal weight.
 """
 
 from __future__ import annotations
@@ -87,16 +69,14 @@ class DifferenceEstimate:
 # Wilson score interval (for binary outcomes like MMLU correct/incorrect)
 # ---------------------------------------------------------------------------
 
-_Z_95 = 1.96  # Two-sided z for 95% confidence — the only level the study uses
+_Z_95 = 1.96  # Two-sided z for Wilson 95% intervals
 
 
 def wilson_interval(scores: list[float]) -> IntervalEstimate:
     """Wilson score 95% CI for a binary proportion.
 
-    More accurate than the normal approximation, especially for proportions near
-    0 or 1. Inputs should be 0/1 floats (or coerced equivalents). Confidence is
-    fixed at 95% — the entire study uses one CI level, so the parameter was
-    pure surface area.
+    Inputs should be 0/1 scores. This function uses a fixed 95% confidence
+    level. The separate equivalence checks use 90% intervals.
     """
     n = len(scores)
     if n == 0:
@@ -157,10 +137,10 @@ def paired_bootstrap_resamples(
 ) -> tuple[float, np.ndarray]:
     """Resample paired score deltas; return (observed_mean_diff, resampled_means).
 
-    With `cluster_keys`, performs cluster-bootstrap: resample unique cluster IDs
-    with replacement, then take all paired deltas from the chosen clusters.
-    Used for MMLU overall CI where examples are clustered by subject and the
-    iid bootstrap underestimates variance.
+    Without `cluster_keys`, sample paired items with replacement.
+    With `cluster_keys`, sample cluster IDs with replacement and include all
+    paired deltas from each selected cluster.
+    MMLU uses subject clusters for pairwise intervals and equivalence tests.
     """
     if len(scores_a) != len(scores_b):
         raise ValueError("scores_a and scores_b must be the same length (paired)")
@@ -289,11 +269,10 @@ def mcnemar_test(
 # ---------------------------------------------------------------------------
 
 def holm_adjust(p_values: list[float]) -> list[float]:
-    """Holm-Bonferroni step-down adjustment of p-values.
+    """Holm-Bonferroni step-down adjustment for one supplied p-value family.
 
-    Returns adjusted p-values in the same order as the input. Uniformly more
-    powerful than Bonferroni; doesn't require the BH PRDS assumption (which is
-    violated for our paired tests within a task).
+    Returns adjusted p-values in the same order as the input.
+    The caller selects which comparisons belong to this family.
     """
     m = len(p_values)
     if m == 0:
@@ -309,15 +288,14 @@ def holm_adjust(p_values: list[float]) -> list[float]:
 
 
 # ---------------------------------------------------------------------------
-# Corpus micro-F1 (the canonical CoNLL NER metric: pool TP/FP/FN, then F1)
+# Corpus micro-F1 from pooled TP/FP/FN
 # ---------------------------------------------------------------------------
 #
-# Per-example (macro) F1 averages each sentence's F1 equally. The canonical
-# CoNLL/conlleval score instead pools counts across the whole corpus and
-# computes one F1 — entity-rich sentences carry proportionally more weight.
-# The two diverge when errors concentrate in particular sentence types (e.g.
-# over-extraction on entity-free sentences inflates macro relative to micro),
-# so the study reports both. Inputs here are per-example (tp, fp, fn) triples.
+# Inputs are per-example (tp, fp, fn) triples. The caller defines what counts
+# as an entity match. This study supplies counts of normalized unique
+# entity-text/type pairs, rather than position-based CoNLL mentions.
+# Corpus micro-F1 pools these counts before calculating F1.
+# Sentence-average F1 instead gives each sentence equal weight.
 
 def _micro_f1(tp: float, fp: float, fn: float) -> float:
     """Pooled F1 from summed counts. Returns 0.0 when there is nothing to score."""

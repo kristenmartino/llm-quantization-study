@@ -1,18 +1,13 @@
-"""Task definitions for the quantization eval.
+"""Task loaders and scorers for the quantization evaluation.
 
-Two tasks ship by default:
+MMLU provides multiple-choice knowledge questions sampled across subjects.
+CoNLL-2003 provides sentences annotated with PER, ORG, LOC and MISC entities.
+Extraction scoring compares normalized unique entity-text/type pairs;
+repeated identical mentions collapse and mention positions are not tracked.
+score_extraction returns sentence F1, while score_extraction_counts supplies
+TP/FP/FN counts for the custom corpus micro-F1 calculated in analyze.py.
 
-  - MMLU subset: knowledge/reasoning, 4-way multiple choice, mechanically scored.
-    Stratified across subjects to avoid topic concentration.
-
-  - CoNLL-2003 NER: extract named entities (PER, ORG, LOC, MISC) from news
-    sentences. Span-level exact match with type agreement. `score_extraction`
-    returns per-example (macro) F1; `score_extraction_counts` returns the
-    (tp, fp, fn) needed for the canonical corpus-level micro-F1 computed in
-    analyze.py. Real-world structured extraction; closer to production use cases.
-
-Each task returns a list of `Example` records and provides a `score` function
-that maps (model_output, gold) -> a float (or 0/1 for binary tasks).
+Each Task contains Example records, prompt settings and a scoring function.
 """
 
 from __future__ import annotations
@@ -292,13 +287,12 @@ def _span_sets(output: str, gold: list) -> tuple[set, set, bool]:
 
 
 def score_extraction(output: str, gold: list) -> float:
-    """Per-example (macro) span-level F1 with type-match required.
+    """Per-sentence F1 over normalized unique entity-text/type pairs.
 
-    Per-example: 2*TP / (2*TP + FP + FN). TP = exact (span_text, type) match.
-    Malformed JSON output → F1 of 0 (a real failure mode worth measuring, not
-    an error to skip). This is the *per-sentence* estimand; analyze.py averages
-    it (macro F1). The canonical corpus-level micro-F1 is computed separately
-    from `score_extraction_counts` by pooling TP/FP/FN across the corpus.
+    TP, FP and FN come from the same sets as score_extraction_counts.
+    Repeated identical mentions collapse and mention positions are ignored.
+    Returns zero when parsing fails, one when both sets are empty, and
+    2*TP / (2*TP + FP + FN) otherwise. analyze.py averages these sentence scores.
     """
     gold_set, pred_set, parse_ok = _span_sets(output, gold)
     if not parse_ok:
@@ -314,14 +308,15 @@ def score_extraction(output: str, gold: list) -> float:
 
 
 def score_extraction_counts(output: str, gold: list) -> dict:
-    """Per-example (tp, fp, fn) plus parse_status, for corpus-level micro-F1.
+    """Per-example counts and parse status for custom entity-text/type micro-F1.
 
-    Unlike `score_extraction` (which returns a per-sentence F1 and scores any
-    malformed JSON as 0), this returns raw counts: a malformed output predicts
-    no spans, so its gold entities become false negatives and it contributes no
-    false positives — the standard conlleval treatment when pooling across the
-    corpus. analyze.py sums these and computes one micro-F1 (the benchmark
-    metric); the macro path keeps the parse-failure-is-zero convention.
+    Gold and predicted entities are normalized into sets of lowercased text
+    and entity-type pairs. Repeated identical mentions collapse, and mention
+    positions are not tracked. This is not standard CoNLL mention-level scoring.
+
+    When parsing fails, predictions are empty: each distinct gold pair becomes
+    a false negative. analyze.py pools these counts to calculate corpus micro-F1.
+    The separate sentence-level scorer assigns parsing failures a score of zero.
     """
     gold_set, pred_set, parse_ok = _span_sets(output, gold)
     tp = len(gold_set & pred_set)

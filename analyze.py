@@ -1,28 +1,13 @@
-"""Read JSONL results, compute statistics, generate the Pareto plot.
+"""Analyze saved evaluation records and plot quality against generation speed.
 
-Reads every results/{task}_{arm}.jsonl, computes per-arm intervals and pairwise
-differences, and writes:
-  - results/summary.json     — machine-readable summary for the writeup
-  - results/summary.txt      — human-readable table
-  - results/pareto.png       — the money-shot quality vs. cost plot
-
-Pairwise differences exploit the paired (same-example, same-seed) design:
-  - MMLU (binary):    McNemar's test for p-values; paired bootstrap for CIs.
-                      Cluster-bootstrap on subjects for the overall task CI.
-  - NER:              two estimands are reported.
-                        * micro-F1 (canonical CoNLL): pool TP/FP/FN, then F1;
-                          paired bootstrap over examples for CIs/p-values.
-                        * macro-F1 (per-sentence): mean of per-example F1;
-                          paired bootstrap on the per-example deltas.
-                      micro is the primary/headline metric; macro is reported
-                      alongside because the gap between them localizes the
-                      failure mode (over-extraction on entity-free sentences).
-
-p-values are Holm-adjusted within each task (3 pairwise tests per task).
-
-Equivalence ("Q8_0 ≈ FP16") is a TOST result against a specified ±1pp
-practical-equivalence margin, not the absence of a significant test — see
-`equivalence` in the summary.
+Writes results/summary.json, results/summary.txt and results/pareto.png.
+MMLU accuracy uses Wilson per-model intervals, subject-level paired bootstrap
+intervals and equivalence checks, and McNemar difference-test p-values.
+Extraction reports custom corpus micro-F1 from pooled text/type-pair counts
+and sentence-average F1, with paired bootstrap intervals and p-values.
+Holm adjustment is applied separately to the three comparisons for each
+metric. TOST checks accuracy and sentence-average F1 against the specified
+margin; the micro-F1 interval is checked separately against that margin.
 
 Usage:
     python analyze.py
@@ -286,7 +271,7 @@ def _analyze_mmlu(task, scores_per_arm, subjects, arm_speed, example_ids) -> dic
 
 def _analyze_ner(task, scores_per_arm, by_id_per_arm, example_ids, arm_speed) -> dict:
     arms = list(scores_per_arm.keys())
-    # Per-example (tp, fp, fn) for the canonical micro-F1, aligned across arms.
+    # Per-example (tp, fp, fn) for custom micro-F1, aligned across arms.
     counts_per_arm: dict[str, list[tuple[int, int, int]]] = {arm: [] for arm in arms}
     pr_per_arm: dict[str, dict] = {}
     for arm in arms:
@@ -315,7 +300,7 @@ def _analyze_ner(task, scores_per_arm, by_id_per_arm, example_ids, arm_speed) ->
         "primary_metric": "micro_f1",
         "intervals": intervals_micro,                     # primary (plotted/headline)
         "pairwise_diffs": [asdict(d) for d in diffs_micro],
-        "intervals_macro": intervals_macro,               # secondary (brittleness)
+        "intervals_macro": intervals_macro,               # secondary (sentence average)
         "pairwise_diffs_macro": [asdict(d) for d in diffs_macro],
         "precision_recall": pr_per_arm,
         "equivalence_margin": EQUIVALENCE_MARGIN,
@@ -367,7 +352,7 @@ def format_summary(results: list[dict]) -> str:
         lines.append(f"\n=== {res['task'].upper()} ===")
         lines.append(f"n per arm: {res['n_per_arm']}  (aligned: {res.get('n_aligned', '?')})")
         primary = res.get("primary_metric", "accuracy")
-        label = {"accuracy": "accuracy", "micro_f1": "micro-F1 (canonical CoNLL)"}.get(primary, primary)
+        label = {"accuracy": "accuracy", "micro_f1": "custom extraction micro-F1"}.get(primary, primary)
         lines.append(f"\nPer-arm {label} (95% CI):")
         for arm, est in res["intervals"].items():
             extra = ""
@@ -435,7 +420,7 @@ def _q4_minus_fp16(per_subject_entry: dict) -> float:
 
 
 def plot_pareto(results: list[dict], out_path: Path) -> None:
-    """Quality-vs-cost frontier across arms, one panel per task (primary metric)."""
+    """Plot quality against generation speed, one panel per task."""
     fig, axes = plt.subplots(1, len(results), figsize=(6 * len(results), 5))
     if len(results) == 1:
         axes = [axes]
@@ -455,12 +440,12 @@ def plot_pareto(results: list[dict], out_path: Path) -> None:
             )
             ax.annotate(arm, (speed, quality),
                         textcoords="offset points", xytext=(8, 8), fontsize=11)
-        ax.set_xlabel("Inference speed (tokens/sec)")
+        ax.set_xlabel("Generation speed (tokens/sec)")
         if res["task"] == "mmlu":
             ax.set_ylabel("Accuracy")
         else:
-            ax.set_ylabel("Span-F1 (micro, CoNLL)")
-        ax.set_title(f"{res['task']}: quality vs. cost")
+            ax.set_ylabel("Custom extraction micro-F1")
+        ax.set_title("MMLU accuracy and generation speed" if res["task"] == "mmlu" else "Extraction F1 and generation speed")
         ax.grid(True, alpha=0.3)
 
     plt.tight_layout()

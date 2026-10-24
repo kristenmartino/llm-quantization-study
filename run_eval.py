@@ -1,10 +1,8 @@
-"""Main eval runner: arms × tasks → JSONL.
+"""Run model versions on task examples and save JSONL records.
 
-For each (arm, task) pair, runs every example through Ollama with deterministic
-sampling, scores the output, and writes one JSONL line per example to
-results/{task}_{arm}.jsonl. Each line records the score, model output, gold
-answer, and per-call timing — enough to reproduce stats and Pareto plots
-downstream without re-running the model.
+The runner uses explicit sampling settings, scores each response and writes
+one record per completed (arm, example_id) pair. Records contain the score,
+model output, gold answer, metadata and per-call timing for analysis replay.
 
 Usage:
     python run_eval.py --task mmlu --n 500
@@ -105,22 +103,19 @@ def run_eval(
     schedule: str = "roundrobin",
     resume: bool = False,
 ) -> None:
-    """Run task across all arms, streaming JSONL per arm.
+    """Run a task across arms and write one JSONL file per arm.
 
-    schedule="roundrobin": for each example, run each arm in turn before
-        advancing — splits any monotonic thermal/daemon drift evenly across
-        arms (the cost-vs-quality framing depends on tok/sec being unbiased).
-    schedule="sequential": old behavior — run arm A fully, then B, then C.
-    resume=True: skip an example only when ALL arms already have a record for
-        that example_id; partial examples re-run all arms (cost ≤ k extra
-        calls per crash).
+    schedule="roundrobin" processes each example across arms before advancing,
+    intending to limit timing differences from temperature and background load.
+    schedule="sequential" processes all examples for one arm before the next.
+    resume=True skips recorded (arm, example_id) pairs and runs missing pairs.
+    Scheduling does not establish unbiased timing or fixed model residency.
     """
     results_dir.mkdir(parents=True, exist_ok=True)
     out_paths = {arm: results_dir / f"{task.name}_{arm}.jsonl" for arm in arms}
 
-    # Warmups for all arms before timed work — first-call latency on a freshly
-    # loaded model can be many times steady-state, biasing whichever arm runs
-    # first. Done sequentially before the example loop, not interleaved.
+    # Initialize all arms before the timed example loop.
+    # Model residency and loading behavior are managed by Ollama.
     for arm in arms:
         print(f"[{arm}] warming up {ARM_TAGS[arm]}...")
         ollama_client.warmup(ARM_TAGS[arm])
@@ -224,13 +219,13 @@ def main() -> None:
         "--schedule",
         default="roundrobin",
         choices=["roundrobin", "sequential"],
-        help="roundrobin (default) interleaves arms per-example to debias tok/sec; "
-             "sequential replicates old behavior (arm A fully, then B, then C).",
+        help="roundrobin (default) runs each example across arms before the next; "
+             "sequential runs each arm's examples together.",
     )
     parser.add_argument(
         "--resume",
         action="store_true",
-        help="append to existing JSONL files; skip examples already complete in all arms.",
+        help="append to existing JSONL files; run only missing (arm, example_id) pairs.",
     )
     args = parser.parse_args()
 

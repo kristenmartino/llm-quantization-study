@@ -10,15 +10,19 @@ Kristen Martino · [kristenmartino.ai](https://kristenmartino.ai) · [Repo](http
 
 ## TL;DR
 
-Scope: Llama 3.1 8B Instruct, two English tasks, deterministic decoding (temp=0), local Ollama on Apple Silicon/Metal. See [Limitations](#limitations).
+Scope: Llama 3.1 8B Instruct, two English tasks, fixed decoding settings (temperature 0, seed 42), local Ollama on Apple Silicon/Metal. See [Limitations](#limitations).
 
-**Q8_0 is a candidate for workload-specific validation.** On these two samples it meets the exploratory equivalence criterion against FP16 — not merely "not significantly different," but equivalent under a specified ±1pp practical-equivalence margin (TOST): MMLU accuracy Δ (FP16 − Q8_0)=−0.2pp (p_TOST=0.019) and NER macro-F1 Δ=+0.0003 (p_TOST=0.002) both clear the equivalence bar, and the NER micro-F1 95% CI [−0.9, +0.2]pp sits entirely inside ±1pp. The recorded local run measured ~1.8× throughput and roughly half the reported model footprint; runtime memory includes additional overhead.
+**Q8_0 met the study’s ±1 percentage-point equivalence criterion on both tested tasks.** The reported TOST p-values were 0.019 for MMLU accuracy and 0.002 for sentence-average extraction F1. For the custom extraction micro-F1 score, the 95% confidence interval for FP16 minus Q8_0 was −0.9 to +0.2 percentage points, also within that margin.
 
-**Q4_K_M traded NER quality for throughput in this run.** This is evidence to test extraction errors on a target workload, not a universal rule about all structured extraction. Q4_K_M shows a measurable NER degradation — **−3.2pp on corpus micro-F1, the custom text-set metric** (95% CI: 0.7–5.7pp; Holm-adjusted p=0.032) — with a larger **−5.0pp drop in mean per-sentence (macro) F1** (CI: 2.1–8.1pp; p=0.003). The gap between the two metrics localizes the failure: Q4 stays competitive on aggregate entity counts but more often fails *entity-free* sentences, hallucinating a spurious entity ~62% of the time vs ~40% for FP16/Q8. The hit is a precision problem (−4.1pp precision, −0.9pp recall), not a recall one — it over-extracts. The MMLU regression (1.6pp) does not reach significance. You buy this for ~40% more throughput (2.5× FP16) and an ~3× smaller footprint.
+Q8_0 generated tokens about 1.8× faster than FP16 and had roughly half the model footprint on this setup.
 
-## Why this matters for PMs
+**Q4_K_M scored lower than FP16 on both extraction measures.** The custom corpus micro-F1 dropped by 3.2 percentage points (95% CI: 0.7–5.7; Holm-adjusted p = 0.032). Sentence-average F1 dropped by 5.0 percentage points (95% CI: 2.1–8.1; Holm-adjusted p = 0.003).
 
-Model quantization is a routine production decision: ship at FP16 and pay for the GPU memory, or ship at Q4 and absorb some quality loss for cheaper, faster inference. This study compares three published Ollama artifacts from one model family with matched prompts and sampling. It measures task scores, local throughput, and reported model footprint; it does not measure deployment cost, production reliability, or quality across arbitrary workloads.
+Q4_K_M generated tokens about 40% faster than Q8_0. Its model footprint was about 4.9 GB, compared with FP16’s 16 GB. MMLU accuracy was 1.6 percentage points below FP16; that difference was not statistically significant.
+
+## Study question
+
+How do FP16, Q8_0 and Q4_K_M versions of Llama 3.1 8B Instruct compare on knowledge questions and named-entity extraction? The experiment uses the same test items, prompts and run settings across versions and compares output quality, token-generation speed and model footprint.
 
 ---
 
@@ -27,24 +31,30 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 **Treatment.** Quantization level — three arms: FP16 (control), Q8_0, Q4_K_M. All three pulled from Ollama: `llama3.1:8b-instruct-{fp16|q8_0|q4_K_M}`.
 
 **Tasks.**
-- **MMLU (knowledge/reasoning).** Stratified subset of 500 questions across 10 subjects (STEM, professional, humanities). Mechanically scored: parse first A–D character from output, compare to gold.
-- **Named entity recognition (CoNLL-2003).** 300 sentences from the test split → JSON array of (entity, type) pairs, scored by normalized entity-text/type-set matching. Text is lowercased and stripped, repeated identical entities collapse to one set member, and token offsets are not evaluated. This is a custom metric, not the official CoNLL/conlleval entity-span evaluation. Two F1 estimands are reported: **corpus micro-F1** (the custom normalized entity-text/type-set metric — pool TP/FP/FN across the corpus, then F1) as the primary headline, and **per-sentence macro-F1** (mean of per-example F1) as a secondary, production-relevant view. They diverge when errors concentrate in particular sentence types, which is itself a finding here. Liberal alias parser for `text|entity|span` and `type|label|tag` keys; malformed JSON contributes its gold spans as false negatives (micro) / scores 0 (macro).
+- **MMLU** — four-option knowledge questions sampled across 10 subjects. Each model processes 500 sampled rows; the analysis uses 499 paired question IDs after collapsing one repeated ID. The scorer reads the first A–D character in each response and compares it with the recorded answer.
+- **Named entity recognition (CoNLL-2003).** Entity extraction on 300 test sentences. The model returns entity text and types in a JSON array. The scorer lowercases entity text and compares unique text/type pairs, collapsing repeated identical mentions within each sentence.
 
-**Design.** Examples paired across arms: same items, same prompts, same seed (42). Arms run round-robin per example to debias inference timing against thermal/daemon drift; warmups for all arms precede the timed loop.
+  Results include custom corpus micro-F1 from pooled match counts and sentence-average F1. This scoring method does not preserve mention positions and is not standard CoNLL evaluation. The parser accepts `text|entity|span` and `type|label|tag` aliases. Malformed JSON contributes annotated entities as false negatives to the pooled counts and receives a sentence score of zero.
+
+**Design.** Each test item is processed by all three model versions before moving to the next. Models are warmed up before timing begins. Alternating between versions is intended to limit timing differences caused by hardware temperature and background system activity.
 
 **Sampling.** Temperature = 0, fixed seed (42), identical prompts and system messages, max_tokens task-appropriate. Held constant across arms.
 
 **Statistics.**
-- MMLU: Wilson 95% CI per arm on accuracy. Paired pairwise differences via paired bootstrap, with cluster-bootstrap on subjects for the overall CI (within-subject correlation is real). p-values from McNemar's test.
-- NER: corpus micro-F1 per arm with bootstrap CI (resample examples, re-pool counts); paired pairwise micro-F1 differences via paired bootstrap (CIs + two-sided p-values centered under H0). Per-sentence macro-F1 reported alongside with the same paired machinery on per-example deltas.
-- Multiple-comparison correction: Holm-Bonferroni applied per task across the 3 pairwise tests (separately for the micro and macro families).
-- **Equivalence.** "Q8_0 ≈ FP16" is a TOST result against a **specified ±1pp practical-equivalence margin** — an exploratory threshold selected during reanalysis, not preregistered before data collection. Its suitability depends on the intended application; the same data do not provide an independent confirmatory test. Two one-sided tests, equivalently the 90% CI lying inside ±0.01. A non-significant difference is *not* treated as evidence of equivalence.
+- **MMLU.** Per-model accuracy uses Wilson 95% confidence intervals. Pairwise confidence intervals and equivalence tests use a paired bootstrap that resamples subject groups. McNemar’s test supplies p-values for differences in accuracy.
+- **Entity extraction.** Confidence intervals for custom corpus micro-F1 resample sentences and pool their match counts. Pairwise comparisons resample the same sentences for both model versions, recalculate each version’s F1, and take the difference. Sentence-average F1 comparisons use paired sentence scores. Two-sided bootstrap p-values use distributions centered on a zero difference.
+- **Multiple-comparison correction.** Holm’s method adjusts p-values separately for MMLU accuracy, extraction corpus micro-F1 and sentence-average F1. Each group contains the three pairwise comparisons among FP16, Q8_0 and Q4_K_M.
+- **Equivalence testing.** The analysis uses two one-sided tests (TOST) with a ±1 percentage-point margin for accuracy and sentence-average F1. Equivalence is declared when the paired 90% confidence interval lies entirely inside that margin. The margin was selected for the equivalence reanalysis.
 
-**Post-hoc sensitivity estimate.** Using observed paired-difference SDs (0.30 for MMLU, 0.27 for NER), a normal approximation at 80% power and α=0.05 gives differences of roughly 3.8pp (n=499) and 4.3pp (n=300), respectively. These are exploratory approximations, not prospective power guarantees for the discrete or bootstrap tests.
+**Approximate sensitivity.** For FP16 versus Q4_K_M, a post-hoc normal approximation estimates 80% power to detect differences of about 3.8 percentage points in MMLU accuracy (499 paired questions) and 4.3 points in sentence-average extraction F1 (300 paired sentences), at a 5% significance threshold.
 
-**One MMLU example dropped (n=499 aligned).** `cais/mmlu`'s `high_school_mathematics` test split contains a genuine duplicate question — the same word problem with shuffled answer choices but the same correct answer. The harness keys analysis on a row-unique `example_id` (`{subject}::{row_index}::{qhash}`) and fingerprints content with a separate `content_hash`, so distinct rows can never silently collapse; `analyze.py` now warns loudly when it collapses the duplicate rather than dropping it silently. The dropped occurrence scored identically in all three arms, so the ~0.1pp accuracy shift changes no conclusion. (The original run hashed question text only; this is the corrected scheme — both leave the published n=499 numbers intact.)
+These estimates use the observed paired-score variability. They do not incorporate subject-level resampling or multiple-comparison correction.
 
-**Provenance.** `results/experiment_manifest.json` records the per-arm model digests (weight-blob SHA256), the modelfile/template, Ollama version, host, seed, sampling options, and dataset ids — to identify the artifacts and runtime used. This records what was compared; distinct hashes do not prove identical base-weight or training provenance across quantization tags. The three weight-blob hashes differ (as expected for distinct quantizations) while stop tokens and chat template are identical across arms.
+**MMLU sample count.** Each saved output file contains 500 rows and 499 distinct example IDs. Two `high_school_mathematics` rows share the same question-based ID. The analysis retains the last record for each ID, leaving 499 aligned pairs.
+
+The current task loader includes the source row index in each ID and records a separate content hash. That ID scheme applies to new runs; the reported results use the original saved outputs.
+
+**Provenance.** `results/experiment_manifest.json` records each version’s weight-file hash and model configuration, plus the Ollama version, host, seed, sampling settings and dataset IDs. The recorded chat templates and stop tokens match across versions. These records document artifact identities and configurations; they do not prove identical base weights and tokenizers or establish that quantization was the only difference.
 
 **Hardware.** MacBook Pro (Apple M4 Max, 14-core CPU / 32-core GPU, 36 GB unified memory), Ollama 0.22.1, llama.cpp Metal backend.
 
@@ -54,60 +64,77 @@ Model quantization is a routine production decision: ship at FP16 and pay for th
 
 ### Headline numbers
 
-| Arm     | MMLU accuracy [95% CI] | NER micro-F1 (text-set) [95% CI] | NER macro-F1 (per-sentence) | NER precision / recall | tok/sec (MMLU / NER) | Memory¹  |
+| Arm     | MMLU accuracy [95% CI] | Custom extraction micro-F1 [95% CI] | Sentence-average extraction F1 | NER precision / recall | Generation tokens/sec (MMLU / extraction) | Model footprint¹ |
 |---------|-------------------------|------------------------------------|------------------------------|------------------------|----------------------|----------|
 | FP16    | 0.585 [0.541, 0.628]    | 0.649 [0.600, 0.696]               | 0.614 [0.570, 0.662]         | 0.553 / 0.785          | 40.9 / 20.7          | ~16.0 GB |
 | Q8_0    | 0.587 [0.544, 0.630]    | 0.652 [0.604, 0.698]               | 0.614 [0.568, 0.661]         | 0.557 / 0.785          | 72.7 / 38.8          | ~8.5 GB  |
 | Q4_K_M  | 0.569 [0.525, 0.612]    | 0.617 [0.567, 0.665]               | 0.564 [0.518, 0.611]         | 0.512 / 0.776          | 102.9 / 51.3         | ~4.9 GB  |
 
-micro-F1 is the custom text-set metric (the headline); macro-F1 is the mean per-sentence score (the brittleness view). Precision/recall is pooled corpus-level.
+The extraction metrics use the study’s custom text/type-pair scorer. Corpus micro-F1 and precision/recall pool match counts; sentence-average F1 averages sentence scores.
 
-¹ Model footprint as reported by Ollama (`ollama show`). On Apple Silicon this is unified memory, not discrete VRAM; runtime usage adds KV cache and activation overhead. On a 36 GB M4 Max, FP16 is the largest model that comfortably runs alongside other workloads — the memory column matters as much as the throughput column.
+¹ Model footprint as reported by Ollama (`ollama show`). This excludes runtime overhead such as the KV cache and activations and should not be read as peak memory usage. The test machine uses unified memory.
 
-### Pairwise effect sizes (paired CIs; Holm-adjusted within task)
+### Pairwise differences (95% confidence intervals; Holm-adjusted per metric)
 
-| Comparison        | MMLU Δ accuracy [95% CI; p_adj]    | NER Δ micro-F1 [95% CI; p_adj]            | NER Δ macro-F1 [95% CI; p_adj]            |
+| Comparison | Δ MMLU accuracy [95% CI; adjusted p] | Δ custom extraction micro-F1 [95% CI; adjusted p] | Δ sentence-average extraction F1 [95% CI; adjusted p] |
 |-------------------|--------------------------------------|---------------------------------------------|---------------------------------------------|
 | FP16 − Q8_0       | −0.002 [−0.008, +0.004]; p_adj=1.00  | −0.003 [−0.009, +0.002]; p_adj=0.29         | +0.000 [−0.006, +0.007]; p_adj=0.92         |
 | FP16 − Q4_K_M     | +0.016 [−0.006, +0.036]; p_adj=0.70  | **+0.032 [+0.007, +0.057]; p_adj=0.032***   | **+0.050 [+0.021, +0.081]; p_adj=0.003***   |
 | Q8_0 − Q4_K_M     | +0.018 [−0.002, +0.038]; p_adj=0.70  | **+0.035 [+0.009, +0.060]; p_adj=0.030***   | **+0.050 [+0.020, +0.081]; p_adj=0.003***   |
 
-Significance markers (`*`) use the Holm-adjusted p-value within each task/metric's 3-test family at α=0.05. **The Q4_K_M NER degradation is significant under both F1 estimands** — micro (the custom text-set metric, ~3.2pp) and macro (per-sentence, ~5.0pp) — so the finding is robust to metric choice; the macro figure is larger because per-sentence averaging amplifies the entity-free-sentence failures (see below). All MMLU pairs are NS after Holm. The FP16 − Q8_0 contrasts are ~0 on every metric — and, formally, *equivalent*:
+Differences are the first version minus the second, in score units; 0.01 equals one percentage point.
+
+Significance markers (`*`) indicate Holm-adjusted p-values below 0.05 within each metric’s three-comparison group. Q4_K_M scored significantly lower than both FP16 and Q8_0 on custom corpus micro-F1 and sentence-average F1. None of the MMLU comparisons was statistically significant after correction. The following table assesses FP16 and Q8_0 equivalence using the study’s ±1 percentage-point margin.
 
 ### Equivalence: Q8_0 vs FP16 (TOST, ±1pp practical-equivalence margin)
 
-| Metric                 | Δ (FP16 − Q8_0) | 90% CI (TOST)        | p_TOST | Verdict        |
-|------------------------|------------------|----------------------|--------|----------------|
-| MMLU accuracy          | −0.002           | [−0.008, +0.004]     | 0.019  | **equivalent** |
-| NER macro-F1           | +0.000           | [−0.005, +0.006]     | 0.002  | **equivalent** |
-| NER micro-F1 (95% CI)  | −0.003           | [−0.009, +0.002]     | —      | within ±1pp    |
+| Metric | Δ (FP16 − Q8_0) | Confidence interval | TOST p-value | Result |
+|---|---|---|---|---|
+| MMLU accuracy | −0.002 | 90%: [−0.008, +0.004] | 0.019 | equivalent |
+| Sentence-average extraction F1 | +0.000 | 90%: [−0.005, +0.006] | 0.002 | equivalent |
+| Custom extraction micro-F1 | −0.003 | 95%: [−0.009, +0.002] | — | within ±1pp |
 
-Under the ±1pp margin chosen during reanalysis, these samples meet the equivalence criterion. That conclusion is conditional on the tasks, artifacts, analysis, and margin; it does not establish interchangeable production behavior.
+### Quality and generation speed
 
-### Quality vs. cost frontier
+![MMLU accuracy and custom extraction micro-F1 plotted against token-generation speed, with confidence intervals.](results/pareto.png)
 
-![Pareto frontier: quality vs. inference speed across arms](results/pareto.png)
+Generation speed counts generated tokens per second, excluding prompt processing and model loading. Error bars show 95% confidence intervals.
 
-In this measured configuration, Q8_0 meets the exploratory equivalence criterion and has ~1.8× FP16 throughput. Q4_K_M earns an additional ~40% throughput (2.5× FP16) but pays for it on NER.
+**Extraction errors.** Compared with FP16, Q4_K_M’s corpus precision fell by 4.1 percentage points and recall fell by 0.9 points. This pattern is consistent with over-extraction in this sample.
 
-**The failure pattern is over-extraction, not malformed output.** Q4 has the *highest* JSON parse rate of the three arms (99.7%, vs. 99.0% FP16 and 98.7% Q8_0) — the brittleness is in *what* it extracts, not whether the JSON is well-formed. Decomposing the corpus counts, Q4's NER hit is almost entirely a precision problem: vs. FP16 it loses 4.1pp precision but only 0.9pp recall. It invents entities rather than missing them. Concretely, that over-extraction concentrates on **entity-free sentences**: of the 72 sentences (24% of the corpus) whose gold answer is the empty set, FP16 and Q8_0 correctly return `[]` ~60% of the time, but Q4 only 37.5% — it hallucinates a spurious entity on the rest. This is also exactly why macro-F1 (5.0pp) exceeds micro-F1 (3.2pp): per-sentence averaging gives each of those 72 empty sentences full weight, so a hallucination tanks a whole sentence to 0; corpus micro-F1 dilutes the same spurious entities across the full entity pool.
+The parser accepted 299/300 Q4_K_M outputs (99.7%), compared with 297/300 for FP16 (99.0%) and 296/300 for Q8_0 (98.7%). Successful parsing did not establish entity accuracy.
 
-### Where the effect concentrates
+Of the 72 sentences without annotated entities, FP16 and Q8_0 each correctly produced no entities for 41 (56.9%); Q4_K_M did so for 27 (37.5%). Those 14 additional failures account for 4.67 percentage points of the overall 5.04-point sentence-average F1 drop.
 
-The Q4 vs. FP16 gap on MMLU is concentrated in `miscellaneous` (−6.0pp) and `professional_medicine` (−6.0pp), with smaller regressions in `moral_scenarios`, `abstract_algebra`, and `machine_learning` (each −4.0pp). Several subjects move the other way — `professional_law` (+4.0pp), `college_computer_science` (+2.0pp), `high_school_us_history` (+2.0pp) — within the noise band for n=50/subject. None of the per-subject pairwise diffs survives Holm correction within the per-subject family of 3 tests, so this is suggestive heterogeneity worth flagging, not replicable evidence of subject-specific quantization sensitivity. The pattern is consistent with the published intuition that quantization hits broad-knowledge recall harder than narrow reasoning, but a properly powered subject-level study would need ~3× the per-subject sample size.
+### MMLU results by subject
 
-*Calibration against the literature — order-of-magnitude only.* Published 4-bit Llama evaluations using **other** quantization methods (GPTQ, AWQ, QLoRA) tend to report low-single-digit percentage-point degradation on standard benchmarks. Ollama's `Q4_K_M` is a different scheme — llama.cpp k-quants (block-wise mixed 4/6-bit with super-block scales) — so this is a sanity check on magnitude, not a like-for-like comparison; GPTQ/AWQ are post-training weight-only methods and QLoRA is an NF4 fine-tuning recipe, each with its own evaluation setup. With that caveat: the NER hit (3.2pp micro / 5.0pp macro) lands at or above that rough band, consistent with structured-output tasks stressing quantization harder than multiple-choice classification, and the MMLU move (1.6pp, NS) is within it.
+The largest observed Q4_K_M accuracy decreases relative to FP16 were 6 percentage points in `miscellaneous` and `professional_medicine`. Accuracy fell 4 points in `moral_scenarios`, `abstract_algebra` and `machine_learning`. It rose 4 points in `professional_law` and 2 points in `college_computer_science` and `high_school_us_history`. Each listed subject has 50 paired questions.
+
+None of the subject-level pairwise differences was statistically significant after Holm correction across the three comparisons within each subject. These small groups do not establish which subjects are more sensitive to quantization. A follow-up study would need a sample-size calculation for a specified subject-level effect.
 
 ---
 
-## How to use these results
+## Using these results
 
-- Use Q8_0 as a candidate for evaluation on similar workloads: it met the exploratory ±1pp criterion on the two samples and was faster on the recorded M4 Max setup.
-- Include entity-free examples and precision checks when evaluating Q4_K_M extraction. This run found a 3.2pp micro-F1 loss versus FP16 on the sampled CoNLL sentences; that does not establish a loss for every extraction task.
-- Keep FP16 as a comparison arm, not a presumed source of truth. It also made task errors. This study does not validate legal, medical, safety-critical, tool-use, or heterogeneous production workloads for any arm.
-- Measure target-device latency, peak runtime memory, workload quality, and operational cost before choosing a deployment format. Reported model size is not peak memory; local tokens/sec is not a production cost benchmark.
+**Q8_0 performed similarly to FP16 in this experiment.**
 
-The observed error pattern motivates follow-up experiments. It does not establish a mechanism inside the model or broad conclusions about reasoning versus pattern matching.
+On the tested knowledge questions and entity-extraction sentences, Q8_0 met the study’s ±1 percentage-point equivalence criterion while generating tokens about 1.8× faster than FP16 on the M4 Max.
+
+These results make Q8_0 a candidate to evaluate for similar workloads. Choosing it for another application requires testing representative inputs and defining an acceptable quality difference.
+
+**Q4_K_M traded extraction quality for faster generation in this experiment.**
+
+Q4_K_M generated tokens about 40% faster than Q8_0 and had a model footprint of about 4.9 GB. Its extraction scores were lower than FP16 by 3.2 percentage points on corpus F1 and 5.0 points on sentence-average F1.
+
+The errors included extra entity predictions in otherwise valid JSON. For an application using structured extraction, evaluate these errors on representative inputs before deciding whether the speed and memory savings justify the quality loss.
+
+**FP16 served as the reference for this comparison.**
+
+The study did not establish a quality advantage for FP16 over Q8_0 on the two tested tasks. It also did not evaluate regulated or safety-critical applications.
+
+For another application, compare the candidate versions against independently verified answers and the application’s quality requirements.
+
+In this run, Q4_K_M’s extraction scores declined significantly relative to FP16, while the MMLU accuracy difference was not statistically significant. The tasks differ in content, output format and scoring, so these results do not establish a general distinction between reasoning and pattern extraction.
 
 ---
 
@@ -115,21 +142,21 @@ The observed error pattern motivates follow-up experiments. It does not establis
 
 - **Single model family.** Results may not generalize to other architectures (Mistral, Qwen, Gemma) or to the smaller/larger Llama 3.1 variants. Quantization-friendliness varies.
 - **English only.** No multilingual eval; quantization effects on non-English tokens can differ.
-- **Deterministic sampling.** Temperature=0 measures the model, not the user-facing distribution. Robustness check at temperature=0.7 would strengthen claims about production behavior.
+- **Decoding settings.** Results use temperature 0 and seed 42. The study does not measure how output quality varies across seeds or nonzero-temperature sampling settings.
 - **No fine-tuned variants.** Domain-tuned models may behave differently under quantization than the base instruct.
-- **MMLU is not the world.** It correlates with reasoning quality but doesn't measure tool use, code generation, or long-context behavior.
-- **Sample size on NER.** n=300 is modest for span-F1 estimation; the micro-F1 CIs are wider than I'd want for a production decision, and the Q4 micro effect's lower bound (0.7pp) sits close to zero even though it clears significance.
-- **Artifact provenance recorded, dataset revisions not pinned.** `experiment_manifest.json` captures the per-arm model digests and modelfiles (identifying the compared artifacts without proving identical base-weight provenance), but the HuggingFace dataset loads are pinned by id+split, not by a commit revision hash — a reproducibility gap if upstream `cais/mmlu` or `eriktks/conll2003` changes.
+- **Task coverage.** The evaluation covers multiple-choice knowledge questions and sentence-level entity extraction. It does not evaluate tool use, code generation or long-context behavior.
+- **Extraction sample size.** The analysis uses 300 paired sentences. The estimated FP16 minus Q4_K_M custom corpus micro-F1 difference is 3.2 percentage points, with a 95% confidence interval of 0.7–5.7 points.
+- **Dataset revisions.** The Hugging Face loads specify dataset IDs and test splits without pinning commit revisions. If upstream data changes, a new run may sample different items. The saved output files remain the basis for the reported analysis.
 - **"Causal" is scoped to the swapped artifact.** This estimates the effect of swapping the published Ollama quantization tag under a fixed local stack; it assumes the three tags share base weights, tokenizer, and chat template (the manifest supports but doesn't prove identical training provenance).
 
 ---
 
 ## Reproducibility
 
-Code, prompts, per-example raw outputs, and the analysis script are in this repo. The harness is deterministic Python: an Ollama wrapper with fixed sampling, two task loaders (MMLU from HuggingFace `cais/mmlu`, NER from `eriktks/conll2003`), Wilson + bootstrap CIs + corpus micro-F1 + paired bootstrap + McNemar + Holm + TOST equivalence (numpy/scipy), a round-robin runner, a provenance manifest writer, and an analyze step that emits the Pareto plot. The `results/` directory ships with the n=2,400 raw outputs backing every number above.
+Code, prompt templates, model outputs and analysis scripts are included. The `results/` directory contains 2,400 recorded outputs. `scripts/check_results.py` recalculates `summary.json` from saved records and compares it with the committed summary, without running the model. This checks whether the analysis reproduces from those records; it does not reproduce the original inference run.
 
 ```
-ollama_client.py       # Thin wrapper around Ollama with deterministic sampling
+ollama_client.py       # Ollama wrapper with explicit sampling settings
 tasks.py               # Task loaders (MMLU subset, CoNLL-2003 NER); micro-F1 counts
 scoring.py             # Wilson/bootstrap/micro-F1 CIs, paired bootstrap, McNemar, Holm, TOST
 provenance.py          # Writes experiment_manifest.json (model digests, versions, host)
@@ -145,7 +172,7 @@ LICENSE                # MIT
 README.md              # This document — the study writeup
 ```
 
-To run the tests and re-verify the published numbers reproduce from committed data (no model/Ollama needed):
+To run the tests and check whether the committed summary reproduces from saved records, without running the model:
 
 ```bash
 pip install -r requirements-dev.txt
@@ -155,7 +182,7 @@ python scripts/check_results.py
 
 **Prerequisites:** Python 3.9+ and [Ollama](https://ollama.com) installed locally. The `--task extraction` CLI choice runs the CoNLL-2003 NER eval — the argument name predates the swap from a synthetic structured-extraction task to NER and is retained for filename compatibility with `results/extraction_*.jsonl`.
 
-To reproduce:
+To run a new inference experiment and analyze its outputs:
 
 ```bash
 git clone https://github.com/kristenmartino/llm-quantization-study
@@ -167,7 +194,7 @@ python run_eval.py --task extraction --n 300   # CoNLL-2003 NER
 python analyze.py
 ```
 
-Total LLM runtime: ~5.8 hours of generation across 3 arms × (500 MMLU + 300 NER) examples, mostly unattended. MMLU runs at ~3h22m wall, NER at ~2h35m.
+**Recorded runtime.** The logged evaluation loops took 3h15m52s for MMLU and 2h35m10s for extraction, about 5h51m combined. Across 2,400 saved outputs, Ollama’s reported token-generation durations total about 32.3 minutes. Token-generation time excludes prompt processing and model loading.
 
 ### Data sources
 

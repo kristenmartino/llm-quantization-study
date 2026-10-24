@@ -1,9 +1,8 @@
-"""Thin wrapper around the Ollama HTTP API.
+"""Ollama HTTP wrapper with explicit sampling settings.
 
-Holds sampling params constant across arms — temperature=0, fixed seed, identical
-options — so the only thing varying between runs is the model tag (which encodes
-the quantization level). Also captures per-call inference timing for the cost
-side of the cost/quality frontier.
+Defaults use temperature 0, seed 42 and shared sampling options across arms.
+Requests record generated-token counts and timing for generation-speed
+comparisons. Token-generation speed excludes prompt processing and loading.
 """
 
 from __future__ import annotations
@@ -16,7 +15,7 @@ import requests
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_TIMEOUT = 300  # seconds; quantized 8B models should respond well within this
+DEFAULT_TIMEOUT = 300  # seconds
 DEFAULT_SEED = 42
 
 # Sampling held constant across arms — the single source of truth, also recorded
@@ -31,7 +30,7 @@ SAMPLING_OPTIONS = {
 
 @dataclass
 class GenerationResult:
-    """One model call: the output plus enough metadata to compute cost."""
+    """Model output with per-call token counts and timing."""
     text: str
     eval_count: int          # tokens generated
     eval_duration_ns: int    # generation time (excludes prompt processing)
@@ -54,11 +53,10 @@ def generate(
     seed: int = DEFAULT_SEED,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> GenerationResult:
-    """Single deterministic generation call to Ollama.
+    """Send one Ollama request with explicit sampling options and a seed.
 
-    Temperature is pinned to 0.0 so we measure the model, not sampling variance.
-    All other options are held constant across arms — the only thing that should
-    differ between arm runs is `model`.
+    Shared defaults come from SAMPLING_OPTIONS. The caller supplies the model,
+    prompt, optional system message, seed and output-token limit.
     """
     payload = {
         "model": model,
@@ -88,9 +86,11 @@ def generate(
 
 
 def warmup(model: str) -> None:
-    """Load the model into VRAM before timed runs so first-call latency doesn't
-    skew per-call timing. Ollama unloads idle models, so call this immediately
-    before each arm's eval loop."""
+    """Issue a short initialization request before evaluation.
+
+    The runner calls this for each arm before starting the timed loop.
+    Model residency is managed by Ollama.
+    """
     generate(model=model, prompt="Hi", max_tokens=4)
     # Brief pause to let the runtime stabilize
     time.sleep(0.5)

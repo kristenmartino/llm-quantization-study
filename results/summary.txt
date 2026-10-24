@@ -32,12 +32,12 @@ Per-subject MMLU effects (sorted by Q4-FP16 Δ):
 === EXTRACTION ===
 n per arm: {'fp16': 300, 'q8_0': 300, 'q4_K_M': 300}  (aligned: 300)
 
-Per-arm micro-F1 (canonical CoNLL) (95% CI):
+Per-arm custom extraction micro-F1 (95% CI):
   fp16      0.6489  [0.6004, 0.6955]  speed=20.7 tok/s  P=0.553 R=0.785
   q8_0      0.6519  [0.6037, 0.6982]  speed=38.8 tok/s  P=0.557 R=0.785
   q4_K_M    0.6173  [0.5672, 0.6645]  speed=51.3 tok/s  P=0.512 R=0.776
 
-Paired pairwise differences — micro-F1 (canonical CoNLL) (95% CI; * = Holm p<0.05):
+Paired pairwise differences — custom extraction micro-F1 (95% CI; * = Holm p<0.05):
   fp16 - q8_0: -0.0030  [-0.0089, +0.0023]  p=0.2938 p_adj=0.2938
   fp16 - q4_K_M: +0.0317  [+0.0066, +0.0574]  p=0.0158 p_adj=0.0316 *
   q8_0 - q4_K_M: +0.0346  [+0.0093, +0.0603]  p=0.01 p_adj=0.03 *
